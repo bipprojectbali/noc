@@ -1,0 +1,127 @@
+:root {
+  --noc-bg: #0f1115;
+  --noc-chrome: #171a21;
+  --noc-border: #2a2f3a;
+  --noc-text: #d7dce5;
+  --noc-muted: #8b93a3;
+  --noc-danger: #ff7b72;
+  --noc-chrome-height: 34px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--noc-bg);
+  color: var(--noc-text);
+  font: 13px/1.4 system-ui, sans-serif;
+}
+
+.noc-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.noc-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  border: 1px solid var(--noc-border);
+}
+
+/* The URL bar is a sibling of the frame, never an overlay: a native webview
+   sits above the web layer and ignores CSS clipping, so anything drawn on top
+   of a pane would be invisible once the webview renderer lands. */
+.noc-pane__chrome {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 6px;
+  height: var(--noc-chrome-height);
+  background: var(--noc-chrome);
+  border-bottom: 1px solid var(--noc-border);
+}
+
+.noc-pane__input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  color: var(--noc-text);
+  background: var(--noc-bg);
+  border: 1px solid var(--noc-border);
+  border-radius: 4px;
+  font: inherit;
+}
+
+.noc-pane__button {
+  padding: 4px 10px;
+  color: var(--noc-text);
+  background: var(--noc-bg);
+  border: 1px solid var(--noc-border);
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Frame and status share one grid cell instead of being stacked with absolute
+   positioning, so the frame keeps its box while hidden and the status can take
+   the slot without being painted over. */
+.noc-pane__body {
+  display: grid;
+  grid-template-areas: "stack";
+  flex: 1;
+  min-height: 0;
+}
+
+.noc-pane__body > * {
+  grid-area: stack;
+  min-width: 0;
+  min-height: 0;
+}
+
+.noc-pane__frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+/* Hidden, never unmounted: removing the iframe from the DOM would reload the
+   site and throw away whatever state it holds. */
+.noc-pane__frame--hidden {
+  visibility: hidden;
+}
+
+.noc-pane__status {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 16px;
+  text-align: center;
+  color: var(--noc-muted);
+}
+
+.noc-pane__status--refused {
+  color: var(--noc-danger);
+}
+
+.noc-pane__reason {
+  margin-top: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--noc-muted);
+}
+
+.noc-error {
+  padding: 24px;
+}
