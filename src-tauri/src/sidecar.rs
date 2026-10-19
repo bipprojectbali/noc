@@ -49,7 +49,7 @@ fn sidecar_env() -> HashMap<String, String> {
     );
     env.insert("NOC_PARENT_PID".to_string(), std::process::id().to_string());
     // Operator overrides are passed through; the sidecar validates them.
-    for key in ["NOC_DATA_DIR", "NOC_LOG_LEVEL"] {
+    for key in ["NOC_DATA_DIR", "NOC_DB_FILE", "NOC_LOG_LEVEL"] {
         if let Ok(value) = std::env::var(key) {
             env.insert(key.to_string(), value);
         }
