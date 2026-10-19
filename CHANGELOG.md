@@ -1,6 +1,25 @@
 # Changelog
 
-## [0.1.0] - 2026-10-19
+## [0.2.0] - 2026-10-19
+
+### Added
+
+- The wall now renders a tree of panes instead of a single pane. The tree is
+  drawn as empty slots, and panes are placed over them, so a pane's iframe
+  keeps the same DOM node through every layout change.
+- Splitting, docking, undocking, deleting and resizing are available through
+  the store. No controls on screen yet.
+- Geometry module: rect arithmetic, a host registry kept outside React, and a
+  sync pass that copies slot rects onto panes without re-rendering.
+
+### Changed
+
+- Deleting a pane now also discards its load state and validation message,
+  instead of leaving them for whatever pane comes next.
+
+### Removed
+
+- Evaluated and dropped the `dockview` dependency. See the README for why.
 
 ### Added
 

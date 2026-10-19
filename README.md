@@ -5,20 +5,37 @@ Router (library mode) and Zustand.
 
 ## Status
 
-M1 and M2 of the plan are in place. The wall currently renders **one pane**;
-the tree engine behind splits exists and is fully tested, but nothing renders
-it yet.
+The wall renders a tree of panes. Splits, docking and deletion are wired
+through the store and proven not to disturb a pane's iframe. There is no UI to
+drive them yet — that is M4 and M5.
 
 | Milestone | State |
 | --- | --- |
 | M1 — one pane with URL bar, load state, explicit refusal state | done |
 | M2 — pure tree engine: split, delete, resize, dock, invariants | done |
-| M3 — tree rendering with a stable flat pane layer | not started |
-| M4 — drag resize | not started |
+| M3 — tree rendering with a stable flat pane layer | done, see caveat |
+| M4 — splitter and drag resize | not started |
 | M5 — per-pane controls and the dock strip | not started |
 | M6 — freeze and suspend policy | not started |
 | M7 — persistence and saved views | not started |
 | M8 — native webview renderer (Tauri) | not started |
+
+**M3 caveat.** The part that matters is proven: a pane's iframe keeps the same
+DOM node and the same parent across split, nested split, dock, undock and
+sibling deletion. Rect *arithmetic* is tested with injected rects. What is not
+yet verified is geometry against a real browser — `getBoundingClientRect`
+returns zero everywhere under happy-dom, so slot measurement and
+`ResizeObserver` have never run for real.
+
+### Layout library
+
+Evaluated `dockview` and chose not to adopt it. Its React bindings live in
+`dockview-react`, it mounts fine, and it would have saved the splitter work.
+But by the time the question was settled the tree engine was already written
+and tested, so the saving was spent; adopting it would instead have cost
+deleting working code and migrating the persist format. It also has no concept
+of a dock strip, so it would not have reduced that work at all. Nothing
+structural depends on the choice, so it can be revisited cheaply.
 
 ## Requirements
 
@@ -76,8 +93,9 @@ a refusal is reported to the user, not worked around.
 src/
   config/    environment handling
   embed/     embeddability classification (pure)
-  layout/    pane tree: types, pure ops, invariants, serializer
-  pane/      pane UI, URL handling, load state machine, store
+  geometry/  rect maths, host registry, slot-to-pane sync
+  layout/    pane tree: types, pure ops, invariants, serializer, renderer
+  pane/      pane UI, URL handling, load state machine, store, pane layer
   server/    entrypoint, routes, header probe
 tests/       mirrors src/, plus recorded header fixtures
 ```
