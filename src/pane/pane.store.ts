@@ -70,6 +70,24 @@ function makeId(): string {
   return crypto.randomUUID();
 }
 
+let lastCreatedAt = 0;
+
+/**
+ * Wall-clock time, forced to strictly increase.
+ *
+ * `createdAt` is the pane layer's entire ordering key, and `Date.now()` only
+ * resolves to the millisecond. Two panes created inside one millisecond tie, and
+ * `pane.layer` then breaks the tie on the random id — so the newer pane sorts
+ * first about half the time, which moves a host that is already mounted. Moving
+ * a host re-inserts its iframe, and a re-inserted iframe reloads the page inside
+ * it: exactly what the two-layer design exists to prevent. A pane created later
+ * must therefore always carry a larger number than every pane before it.
+ */
+function nextCreatedAt(): number {
+  lastCreatedAt = Math.max(Date.now(), lastCreatedAt + 1);
+  return lastCreatedAt;
+}
+
 export function paneLoadState(state: WallState, paneId: PaneId): PaneLoadState {
   return state.load[paneId] ?? INITIAL_PANE_LOAD_STATE;
 }
@@ -93,7 +111,7 @@ export const useWallStore = create<WallState>((set, get) => {
   };
 
   return {
-    tree: createTree(makeId, Date.now()),
+    tree: createTree(makeId, nextCreatedAt()),
     load: {},
     urlError: {},
     persistence: { kind: "loading" },
@@ -168,13 +186,13 @@ export const useWallStore = create<WallState>((set, get) => {
     // own, which is what lets the tree be tested without React or a DOM.
     splitPane: (paneId, direction) => {
       set((state) => ({
-        tree: splitPane(state.tree, paneId, direction, makeId, Date.now()),
+        tree: splitPane(state.tree, paneId, direction, makeId, nextCreatedAt()),
       }));
     },
 
     deletePane: (paneId) => {
       set((state) => {
-        const tree = deletePane(state.tree, paneId, makeId, Date.now());
+        const tree = deletePane(state.tree, paneId, makeId, nextCreatedAt());
         // Delete is the one place a pane is meant to die, so its transient
         // state goes with it instead of leaking into the next pane.
         const { [paneId]: _droppedLoad, ...load } = state.load;
@@ -188,7 +206,7 @@ export const useWallStore = create<WallState>((set, get) => {
 
     dockPane: (paneId) => {
       set((state) => ({
-        tree: dockPane(state.tree, paneId, makeId, Date.now()),
+        tree: dockPane(state.tree, paneId, makeId, nextCreatedAt()),
       }));
     },
 

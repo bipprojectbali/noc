@@ -218,6 +218,28 @@ describe("pane layer order is creation order and never shifts", () => {
     expect(secondOrder.slice(0, firstOrder.length)).toEqual(firstOrder);
     expect(secondOrder).toHaveLength(firstOrder.length + 1);
   });
+
+  test("splits inside one millisecond still only append", async () => {
+    render(<AppShell />);
+    const created = [ROOT];
+
+    // Nothing is awaited between these splits, so they share a millisecond —
+    // all the resolution a wall clock has. Ordering panes by anything that can
+    // tie here puts a later pane before an earlier one, and React then moves a
+    // mounted host, which reloads the page inside its iframe.
+    await act(async () => {
+      for (let i = 0; i < 20; i += 1) {
+        const before = new Set(treePaneIds());
+        useWallStore.getState().splitPane(ROOT, i % 2 === 0 ? "row" : "column");
+        created.push(treePaneIds().find((id) => !before.has(id))!);
+      }
+    });
+
+    const hosts = screen
+      .getAllByTestId(/^pane-host-/)
+      .map((host) => host.getAttribute("data-pane-host"));
+    expect(hosts).toEqual(created);
+  });
 });
 
 describe("the layout layer renders slots, not panes", () => {
