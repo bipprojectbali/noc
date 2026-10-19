@@ -19,7 +19,7 @@ through the store.
 | M4 — splitter and drag resize | done for iframe panes, see below |
 | M5 — per-pane controls and the dock strip | not started |
 | M6 — freeze and suspend policy | not started |
-| M7 — persistence and saved views | not started |
+| M7 — persistence and saved views | layout restores on reload and saves on change; saved views not started |
 | M8 — native webview renderer (Tauri) | not started |
 
 **What a browser confirmed.** Geometry no longer rests on injected rects alone.

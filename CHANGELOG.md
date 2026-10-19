@@ -10,6 +10,10 @@
   without the drag dying — for panes drawn as iframes. A native webview takes
   mouse input outside the browser's reach, so that case is still open.
 
+- The wall reloads the layout you left. Changes are saved as you make them,
+  and a layout that cannot be loaded is never overwritten by the empty wall
+  shown in its place. The notice above the wall says when saving is off.
+
 ### Changed
 
 - Pane geometry is now confirmed against a real browser rather than only

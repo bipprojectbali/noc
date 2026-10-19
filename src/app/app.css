@@ -26,11 +26,33 @@ body {
   font: 13px/1.4 system-ui, sans-serif;
 }
 
+/* The column holds the optional persistence notice above the wall. The wall
+   takes whatever height the notice leaves. */
+.noc-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.noc-notice {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--noc-chrome);
+  border-bottom: 1px solid var(--noc-border);
+  color: var(--noc-muted);
+}
+
+.noc-notice--error {
+  color: var(--noc-danger);
+}
+
 /* Shared coordinate space for both layers. Pane hosts are positioned against
    this box, so it must be the containing block. */
 .noc-shell {
   position: relative;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 

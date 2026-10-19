@@ -29,6 +29,7 @@ import {
   type PaneLoadEvent,
   type PaneLoadState,
 } from "./pane.load-state.ts";
+import type { PersistenceStatus } from "../persist/persist.status.ts";
 import { fetchEmbeddability } from "./pane.probe-client.ts";
 import { releasePane } from "./pane.renderer.ts";
 import { normalizePaneUrl } from "./pane.url.ts";
@@ -38,6 +39,17 @@ export type WallState = {
   load: Record<PaneId, PaneLoadState>;
   /** Validation message for what the user last typed, per pane. */
   urlError: Record<PaneId, string | null>;
+  persistence: PersistenceStatus;
+  setPersistence: (status: PersistenceStatus) => void;
+  /**
+   * Replaces the whole wall with a restored layout. Every pane in `toProbe` is
+   * checked for framing again, because a site's headers can change overnight.
+   */
+  restoreLayout: (
+    tree: LayoutTree,
+    load: Record<PaneId, PaneLoadState>,
+    toProbe: { paneId: PaneId; url: string }[],
+  ) => void;
   submitUrl: (paneId: PaneId, raw: string) => void;
   reloadPane: (paneId: PaneId) => void;
   clearPane: (paneId: PaneId) => void;
@@ -84,6 +96,16 @@ export const useWallStore = create<WallState>((set, get) => {
     tree: createTree(makeId, Date.now()),
     load: {},
     urlError: {},
+    persistence: { kind: "loading" },
+
+    setPersistence: (status) => {
+      set({ persistence: status });
+    },
+
+    restoreLayout: (tree, load, toProbe) => {
+      set({ tree, load, urlError: {} });
+      for (const { paneId, url } of toProbe) probe(paneId, url);
+    },
 
     submitUrl: (paneId, raw) => {
       const result = normalizePaneUrl(raw);
