@@ -9,6 +9,7 @@ import {
 } from "../../src/persist/persist.sync.ts";
 import { DEFAULT_WALL_SETTINGS } from "../../src/persist/persist.types.ts";
 import { useWallStore } from "../../src/pane/pane.store.ts";
+import { resetWallStore } from "../fixtures/wall-store.ts";
 
 const ROOT = "root";
 const STORED_ROOT = "stored";
@@ -18,15 +19,11 @@ type Recorded = { method: string; body: unknown };
 let persistence: WallPersistence | null = null;
 
 beforeEach(() => {
-  useWallStore.setState({
-    tree: createTree(() => ROOT, 1),
-    load: {},
-    urlError: {},
-    persistence: { kind: "loading" },
-  });
+  resetWallStore(ROOT);
 });
 
 afterEach(() => {
+  // Stopped first, so a test's subscription cannot write into the next test.
   persistence?.stop();
   persistence = null;
 });

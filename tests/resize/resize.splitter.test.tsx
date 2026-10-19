@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { AppShell } from "../../src/app/app.shell.tsx";
-import { createTree } from "../../src/layout/layout.tree.ts";
 import type { SplitNode } from "../../src/layout/layout.types.ts";
 import { useWallStore } from "../../src/pane/pane.store.ts";
 import { stubRect } from "../fixtures/dom-rect.ts";
+import { resetWallStore } from "../fixtures/wall-store.ts";
 import {
   RESIZING_BODY_CLASS,
   registerPanePointerSuppressor,
@@ -20,16 +20,17 @@ const SPLITTER_WIDTH = 6;
 const TRACK = CONTAINER_WIDTH - SPLITTER_WIDTH;
 
 beforeEach(() => {
-  useWallStore.setState({
-    tree: createTree(() => ROOT, 1),
-    load: {},
-    urlError: {},
-  });
+  resetWallStore(ROOT);
   document.body.classList.remove(RESIZING_BODY_CLASS);
 });
 
 afterEach(() => {
+  // Unmounting ends any drag still in progress, which hands the panes back
+  // their pointer. Resuming here as well covers a suspend a test left behind:
+  // the suppressor registry is process-wide, so a leftover one would silence
+  // every later test that drives a drag.
   cleanup();
+  resumePanePointerCapture();
   document.body.classList.remove(RESIZING_BODY_CLASS);
 });
 

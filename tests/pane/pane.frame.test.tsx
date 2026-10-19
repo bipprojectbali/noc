@@ -1,24 +1,30 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 
-import { createTree } from "../../src/layout/layout.tree.ts";
 import { PaneFrame } from "../../src/pane/pane.frame.tsx";
 import { useWallStore } from "../../src/pane/pane.store.ts";
 import type { EmbedVerdict } from "../../src/embed/embed.classifier.ts";
+import { resetWallStore, settleAsyncWork } from "../fixtures/wall-store.ts";
 
 const PANE_ID = "p1";
+
+/**
+ * How long a `waitFor` may poll for an outcome that depends on the probe chain.
+ *
+ * The probe here is an in-memory stub that resolves in a few milliseconds, so
+ * the real cost is React rendering after the dispatch. Bun's default of 1000 ms
+ * leaves little room if the machine pauses that work. 2000 ms allows for a
+ * pause of that kind, while a genuine stall still fails within the run. This is
+ * a chosen budget, not a measured figure: no timing was recorded to set it.
+ */
+const PROBE_WAIT_MS = 2000;
+const WAIT = { timeout: PROBE_WAIT_MS };
 
 type ProbeStub = { verdict: EmbedVerdict; reason: string };
 
 let probeStub: ProbeStub = { verdict: "allowed", reason: "no framing headers present" };
 let probeCalls: string[] = [];
 const realFetch = globalThis.fetch;
-
-function resetStore(): void {
-  let counter = 0;
-  const tree = createTree(() => (counter === 0 ? (counter++, PANE_ID) : `x${counter++}`), 1);
-  useWallStore.setState({ tree, load: {}, urlError: {} });
-}
 
 beforeEach(() => {
   probeCalls = [];
@@ -30,10 +36,13 @@ beforeEach(() => {
       headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;
-  resetStore();
+  resetWallStore(PANE_ID);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Probes still in flight are settled first, while the tree is still mounted,
+  // so none of them can land in the next test's store.
+  await settleAsyncWork();
   cleanup();
   globalThis.fetch = realFetch;
 });
@@ -80,7 +89,7 @@ describe("PaneFrame shows an allowed target", () => {
       expect(
         screen.getByTestId(`pane-frame-${PANE_ID}`).getAttribute("src"),
       ).toBe("https://example.com/");
-    });
+    }, WAIT);
     expect(probeCalls).toHaveLength(1);
     expect(probeCalls[0]).toContain(encodeURIComponent("https://example.com/"));
     expect(
@@ -96,7 +105,7 @@ describe("PaneFrame shows an allowed target", () => {
       expect(
         screen.getByTestId(`pane-frame-${PANE_ID}`).getAttribute("src"),
       ).toBe("https://info.cern.ch/");
-    });
+    }, WAIT);
   });
 });
 
@@ -106,8 +115,9 @@ describe("PaneFrame shows an explicit refusal, never a blank box", () => {
     render(<PaneFrame paneId={PANE_ID} />);
     await submit("https://github.com");
 
-    const refusal = await waitFor(() =>
-      screen.getByTestId(`pane-refused-${PANE_ID}`),
+    const refusal = await waitFor(
+      () => screen.getByTestId(`pane-refused-${PANE_ID}`),
+      WAIT,
     );
     expect(refusal.textContent).toContain("github.com refuses to be framed");
     expect(refusal.textContent).toContain("x-frame-options: deny");
@@ -127,7 +137,7 @@ describe("PaneFrame shows an explicit refusal, never a blank box", () => {
       expect(
         screen.getByTestId(`pane-frame-${PANE_ID}`).getAttribute("src"),
       ).toBe("https://example.com/");
-    });
+    }, WAIT);
   });
 });
 
@@ -136,7 +146,7 @@ describe("PaneFrame validates input before touching the iframe", () => {
     render(<PaneFrame paneId={PANE_ID} />);
     await submit("javascript:alert(1)");
 
-    const alert = await waitFor(() => screen.getByRole("alert"));
+    const alert = await waitFor(() => screen.getByRole("alert"), WAIT);
     expect(alert.textContent).toContain("Only http and https");
     expect(screen.getByTestId(`pane-frame-${PANE_ID}`).getAttribute("src")).toBeNull();
     expect(probeCalls).toHaveLength(0);
@@ -146,7 +156,7 @@ describe("PaneFrame validates input before touching the iframe", () => {
     render(<PaneFrame paneId={PANE_ID} />);
     await submit("   ");
 
-    const alert = await waitFor(() => screen.getByRole("alert"));
+    const alert = await waitFor(() => screen.getByRole("alert"), WAIT);
     expect(alert.textContent).toContain("Enter a URL");
     expect(probeCalls).toHaveLength(0);
   });
@@ -160,14 +170,14 @@ describe("PaneFrame URL bar visibility", () => {
       expect(
         screen.getByTestId(`pane-frame-${PANE_ID}`).getAttribute("src"),
       ).toBe("https://example.com/");
-    });
+    }, WAIT);
     const before = screen.getByTestId(`pane-frame-${PANE_ID}`);
 
     await setUrlBarVisible(false);
 
     await waitFor(() => {
       expect(screen.queryByLabelText(`URL for pane ${PANE_ID}`)).toBeNull();
-    });
+    }, WAIT);
     const after = screen.getByTestId(`pane-frame-${PANE_ID}`);
     expect(Object.is(before, after)).toBe(true);
     expect(after.getAttribute("src")).toBe("https://example.com/");

@@ -2,21 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { AppShell } from "../../src/app/app.shell.tsx";
-import { createTree } from "../../src/layout/layout.tree.ts";
 import type { SplitNode } from "../../src/layout/layout.types.ts";
 import { useWallStore } from "../../src/pane/pane.store.ts";
 import { stubRect } from "../fixtures/dom-rect.ts";
+import { resetWallStore, settleAsyncWork } from "../fixtures/wall-store.ts";
 
 const ROOT = "root";
 const realFetch = globalThis.fetch;
-
-function resetStore(): void {
-  useWallStore.setState({
-    tree: createTree(() => ROOT, 1),
-    load: {},
-    urlError: {},
-  });
-}
 
 beforeEach(() => {
   globalThis.fetch = (async () =>
@@ -24,10 +16,12 @@ beforeEach(() => {
       JSON.stringify({ verdict: "allowed", reason: "no framing headers present" }),
       { headers: { "content-type": "application/json" } },
     )) as unknown as typeof fetch;
-  resetStore();
+  resetWallStore(ROOT);
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // Settles probes the test started, so none lands in the next test's store.
+  await settleAsyncWork();
   cleanup();
   globalThis.fetch = realFetch;
 });
