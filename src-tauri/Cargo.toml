@@ -1,0 +1,22 @@
+[package]
+name = "noc-shell"
+version = "0.2.0"
+description = "Native shell for the NOC wall"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# `unstable` is what exposes `Window::add_child`, the multiwebview API. One
+# window holding many child webviews is the whole point of this shell: a webview
+# renders its URL as a top-level document, so X-Frame-Options never applies.
+tauri = { version = "2.10", features = ["unstable"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true

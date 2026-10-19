@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NOC wall",
+  "version": "0.2.0",
+  "identifier": "dev.noc.wall",
+  "build": {
+    "beforeDevCommand": "bun run build:sidecar",
+    "beforeBuildCommand": "bun run build:sidecar"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": [],
+    "externalBin": ["binaries/noc-server"]
+  }
+}

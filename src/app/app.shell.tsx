@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { geometryRegistry } from "../geometry/geometry.store.ts";
-import { syncPaneGeometry } from "../geometry/geometry.sync.ts";
+import { domRectReader, syncPaneGeometry } from "../geometry/geometry.sync.ts";
 import { LayoutRenderer } from "../layout/layout.renderer.tsx";
 import { PaneLayer } from "../pane/pane.layer.tsx";
+import { placePane } from "../pane/pane.renderer.ts";
 import { useWallStore } from "../pane/pane.store.ts";
 
 /**
@@ -21,7 +22,7 @@ export function AppShell() {
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (container === null) return;
-    syncPaneGeometry(container, geometryRegistry);
+    syncPaneGeometry(container, geometryRegistry, domRectReader, placePane);
   }, [tree]);
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export function AppShell() {
     if (typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver(() => {
-      syncPaneGeometry(container, geometryRegistry);
+      syncPaneGeometry(container, geometryRegistry, domRectReader, placePane);
     });
     observer.observe(container);
     for (const slot of container.querySelectorAll("[data-pane-slot]")) {

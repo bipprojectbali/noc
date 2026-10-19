@@ -42,6 +42,15 @@ function slotRects(layer: Element, readRect: RectReader): Map<PaneId, Rect> {
   return found;
 }
 
+/**
+ * Told about every pane on every sync, placed or not.
+ *
+ * The web layer is positioned by writing style here, but a native webview is not
+ * in the DOM and has to be moved through the shell. Rather than let this file
+ * know about renderers, it reports placement and lets the caller forward it.
+ */
+export type PanePlacer = (paneId: PaneId, visible: boolean) => void;
+
 export type SyncResult = {
   /** Panes whose rect changed, so callers can tell a no-op sync from real work. */
   moved: PaneId[];
@@ -59,6 +68,7 @@ export function syncPaneGeometry(
   container: Element,
   registry: GeometryRegistry,
   readRect: RectReader = domRectReader,
+  place?: PanePlacer,
 ): SyncResult {
   const containerRect = readRect(container);
   const slots = slotRects(container, readRect);
@@ -74,11 +84,16 @@ export function syncPaneGeometry(
       unplaced.push(paneId);
       host.style.visibility = "hidden";
       registry.setLastRect(paneId, ZERO_RECT);
+      place?.(paneId, false);
       continue;
     }
 
     const rect = toLayerRect(slot, containerRect);
-    host.style.visibility = isEmptyRect(rect) ? "hidden" : "visible";
+    const visible = !isEmptyRect(rect);
+    host.style.visibility = visible ? "visible" : "hidden";
+    // Reported even when the rect is unchanged: a renderer outside the DOM may
+    // have its own reasons to be out of step, and it dedupes for itself.
+    place?.(paneId, visible);
     if (rectsEqual(rect, registry.lastRect(paneId))) continue;
 
     for (const [property, value] of Object.entries(rectToStyle(rect))) {

@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The wall page is served over http by the sidecar, so it is a remote origin as far as Tauri is concerned. It needs IPC to place pane webviews.",
+  "windows": ["wall"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*", "http://localhost:*"]
+  },
+  "permissions": [
+    "core:default",
+    "allow-pane-webview-show",
+    "allow-pane-webview-place",
+    "allow-pane-webview-close"
+  ]
+}

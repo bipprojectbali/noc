@@ -1,15 +1,20 @@
 import { isPane, type PaneId } from "../layout/layout.types.ts";
+import { paneRendererFor } from "./pane.renderer.ts";
 import { paneLoadState, useWallStore } from "./pane.store.ts";
 import { PaneUrlBar } from "./pane.urlbar.tsx";
 
 export type PaneFrameProps = { paneId: PaneId };
 
 /**
- * One pane: its chrome and its frame.
+ * One pane: its chrome and its content.
  *
- * The iframe is mounted for the pane's whole life and only ever hidden with
- * CSS. Unmounting it, or moving it to a different parent in the DOM, reloads
- * the site and discards everything it holds.
+ * The content is mounted for the pane's whole life and only ever hidden.
+ * Unmounting it, or moving it to a different parent in the DOM, reloads the
+ * site and discards everything it holds.
+ *
+ * Chrome is a sibling of the content, never an overlay. Under the webview
+ * renderer the pane is a native view that paints above the whole web layer, so
+ * anything drawn on top of it would simply not be there.
  */
 export function PaneFrame({ paneId }: PaneFrameProps) {
   const node = useWallStore((state) => state.tree.nodes[paneId]);
@@ -18,14 +23,16 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
   const submitUrl = useWallStore((state) => state.submitUrl);
   const reloadPane = useWallStore((state) => state.reloadPane);
   const setUrlBarVisible = useWallStore((state) => state.setUrlBarVisible);
-  const dispatchLoad = useWallStore((state) => state.dispatchLoad);
 
   if (node === undefined || !isPane(node)) {
     return <div className="noc-error">Pane {paneId} is not in the layout.</div>;
   }
 
-  const showFrame = load.kind === "loading" || load.kind === "ready";
-  const frameSrc = showFrame ? load.url : undefined;
+  const renderer = paneRendererFor(node.strategy);
+  // Framing permission is an iframe problem. A native webview is a top-level
+  // document, so reporting a refusal there would be reporting a limit that does
+  // not exist for this pane.
+  const framingApplies = renderer.kind === "iframe";
 
   return (
     <section className="noc-pane" data-pane-id={paneId}>
@@ -41,18 +48,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
       )}
 
       <div className="noc-pane__body">
-        <iframe
-          className={
-            showFrame ? "noc-pane__frame" : "noc-pane__frame noc-pane__frame--hidden"
-          }
-          data-testid={`pane-frame-${paneId}`}
-          title={`Pane ${paneId}`}
-          src={frameSrc}
-          onLoad={() => {
-            if (frameSrc === undefined) return;
-            dispatchLoad(paneId, { type: "frame-loaded", url: frameSrc });
-          }}
-        />
+        <renderer.Content paneId={paneId} url={node.url} load={load} />
 
         {load.kind === "empty" && (
           <p className="noc-pane__status">
@@ -62,11 +58,11 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
           </p>
         )}
 
-        {load.kind === "probing" && (
+        {load.kind === "probing" && framingApplies && (
           <p className="noc-pane__status">Checking whether {load.url} can be framed…</p>
         )}
 
-        {load.kind === "refused" && (
+        {load.kind === "refused" && framingApplies && (
           <div
             className="noc-pane__status noc-pane__status--refused"
             role="status"

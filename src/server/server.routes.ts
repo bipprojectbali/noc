@@ -4,6 +4,14 @@ import { probeEmbeddability } from "./embed.probe.ts";
 
 export const EMBEDDABILITY_PATH = "/api/embeddability";
 
+/**
+ * Persistence endpoints. Declared here with the other paths so the browser can
+ * import them without reaching into the server module that holds the database.
+ */
+export const WALL_PATH = "/api/wall";
+export const WALL_VIEWS_PATH = "/api/wall/views";
+export const WALL_VIEW_PATH = "/api/wall/views/:name";
+
 /** A page the wall can always frame, so tests and setup never depend on the network. */
 export const SELF_TEST_PATH = "/api/self-test";
 

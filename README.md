@@ -80,8 +80,10 @@ Every environment-derived value lives in `src/config/config.env.ts`.
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `NOC_HOST` | `127.0.0.1` | Loopback on purpose. See the warning below. |
-| `NOC_PORT` | `7788` | Startup fails if taken; it never silently moves. |
-| `NOC_DATA_DIR` | `.noc-data` | Reserved for M7 persistence. |
+| `NOC_PORT` | `7788` | Startup fails if taken; it never silently moves. `0` takes any free port (the Tauri shell does this). |
+| `NOC_DATA_DIR` | `.noc-data` | Directory that holds the wall database. |
+| `NOC_DB_FILE` | `noc.sqlite` | Database file name inside `NOC_DATA_DIR`. |
+| `NOC_PARENT_PID` | unset | Set by the Tauri shell. The server exits when that process is gone. |
 | `NOC_LOG_LEVEL` | `info` | `error`, `warn`, `info`, `debug`. |
 
 > **Binding to `0.0.0.0` exposes more than the UI.** The embeddability probe

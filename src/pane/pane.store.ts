@@ -30,6 +30,7 @@ import {
   type PaneLoadState,
 } from "./pane.load-state.ts";
 import { fetchEmbeddability } from "./pane.probe-client.ts";
+import { releasePane } from "./pane.renderer.ts";
 import { normalizePaneUrl } from "./pane.url.ts";
 
 export type WallState = {
@@ -156,6 +157,9 @@ export const useWallStore = create<WallState>((set, get) => {
         // state goes with it instead of leaking into the next pane.
         const { [paneId]: _droppedLoad, ...load } = state.load;
         const { [paneId]: _droppedError, ...urlError } = state.urlError;
+        // A native webview is not removed by React, because it was never in the
+        // DOM. Delete is the only place it is right to destroy one.
+        releasePane(paneId);
         return { tree, load, urlError };
       });
     },
