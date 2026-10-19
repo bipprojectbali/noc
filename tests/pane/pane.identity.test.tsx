@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { AppShell } from "../../src/app/app.shell.tsx";
 import { createTree } from "../../src/layout/layout.tree.ts";
+import type { SplitNode } from "../../src/layout/layout.types.ts";
 import { useWallStore } from "../../src/pane/pane.store.ts";
+import { stubRect } from "../fixtures/dom-rect.ts";
 
 const ROOT = "root";
 const realFetch = globalThis.fetch;
@@ -138,6 +140,46 @@ describe("constraint 1: a pane's iframe survives every layout change", () => {
     expect(Object.is(parentBefore, after.parentNode)).toBe(true);
     expect(after.getAttribute("src")).toBe("https://example.com/");
     expect(treePaneIds()).toEqual([ROOT]);
+  });
+
+  test("a whole drag-resize session leaves the iframe untouched", async () => {
+    render(<AppShell />);
+    await loadUrl(ROOT, "https://example.com");
+    await act(async () => {
+      useWallStore.getState().splitPane(ROOT, "row");
+    });
+
+    const split = Object.values(useWallStore.getState().tree.nodes).find(
+      (node) => node.kind === "split",
+    ) as SplitNode;
+    const splitter = screen.getByTestId(`splitter-${split.id}`);
+    const container = splitter.parentElement!;
+    stubRect(container, { left: 0, top: 0, width: 1000, height: 600 });
+    stubRect(splitter, { left: 497, top: 0, width: 6, height: 600 });
+
+    const before = frameOf(ROOT);
+    const parentBefore = before.parentNode;
+
+    // A resize re-renders the layout layer on every move. The pane layer must
+    // sit it out entirely.
+    fireEvent.pointerDown(splitter, {
+      pointerId: 1,
+      button: 0,
+      clientX: 500,
+      clientY: 300,
+    });
+    for (const x of [520, 560, 610, 680, 740]) {
+      fireEvent.pointerMove(splitter, { pointerId: 1, clientX: x, clientY: 300 });
+    }
+    fireEvent.pointerUp(splitter, { pointerId: 1 });
+
+    const sizes = (useWallStore.getState().tree.nodes[split.id] as SplitNode).sizes;
+    expect(sizes[0]).toBeGreaterThan(0.5);
+
+    const after = frameOf(ROOT);
+    expect(Object.is(before, after)).toBe(true);
+    expect(Object.is(parentBefore, after.parentNode)).toBe(true);
+    expect(after.getAttribute("src")).toBe("https://example.com/");
   });
 
   test("deleting a pane removes its iframe and its transient state", async () => {

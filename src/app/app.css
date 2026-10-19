@@ -6,6 +6,7 @@
   --noc-muted: #8b93a3;
   --noc-danger: #ff7b72;
   --noc-chrome-height: 34px;
+  --noc-splitter-size: 6px;
 }
 
 * {
@@ -66,6 +67,40 @@ body {
   flex: 1;
   min-width: 0;
   min-height: 0;
+}
+
+/* The splitter is a flex item between the two children, never an overlay over a
+   pane: a native webview ignores CSS clipping, so anything drawn on top of a
+   pane would be invisible once the webview renderer lands. */
+.noc-splitter {
+  flex: 0 0 var(--noc-splitter-size);
+  background: var(--noc-border);
+  /* Without this a touch drag scrolls the page instead of moving the splitter. */
+  touch-action: none;
+}
+
+.noc-splitter:hover {
+  background: var(--noc-muted);
+}
+
+.noc-splitter--row {
+  cursor: col-resize;
+}
+
+.noc-splitter--column {
+  cursor: row-resize;
+}
+
+/* Set while a drag is in progress. See `resize.pointer-capture.ts`: this class
+   is the iframe implementation of "no pane may take the cursor right now", and
+   it is applied directly to <body> so that quieting the frames never re-renders
+   them. It does nothing for a native webview, which is not in the DOM. */
+body.noc-resizing {
+  user-select: none;
+}
+
+body.noc-resizing .noc-pane__frame {
+  pointer-events: none;
 }
 
 /* Pane layer: above the slots, never reordered, placed imperatively. */

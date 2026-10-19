@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- A splitter between the two halves of every split. Drag it to change how the
+  space is shared; Escape puts the split back where it was. The panes stop
+  taking the cursor for the length of the drag, so the pointer can cross a pane
+  without the drag dying — for panes drawn as iframes. A native webview takes
+  mouse input outside the browser's reach, so that case is still open.
+
+### Changed
+
+- Pane geometry is now confirmed against a real browser rather than only
+  against injected rects: panes land on their slots, and a window resize
+  re-places them.
+
 ## [0.2.0] - 2026-10-19
 
 ### Added

@@ -4,6 +4,7 @@
  */
 
 import { SLOT_ATTRIBUTE } from "../geometry/geometry.sync.ts";
+import { ResizeSplitter } from "../resize/resize.splitter.tsx";
 import { isPane, type LayoutTree, type NodeId } from "./layout.types.ts";
 
 export type LayoutRendererProps = { tree: LayoutTree };
@@ -35,6 +36,13 @@ function LayoutNodeView({ tree, nodeId }: { tree: LayoutTree; nodeId: NodeId }) 
       <div className="noc-split__child" style={{ flexGrow: firstSize }}>
         <LayoutNodeView tree={tree} nodeId={firstId} />
       </div>
+      {/* A sibling of both children, so it takes its own space rather than
+          covering a pane. */}
+      <ResizeSplitter
+        splitId={node.id}
+        direction={node.direction}
+        firstFraction={firstSize}
+      />
       <div className="noc-split__child" style={{ flexGrow: secondSize }}>
         <LayoutNodeView tree={tree} nodeId={secondId} />
       </div>

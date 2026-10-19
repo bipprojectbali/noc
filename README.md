@@ -5,27 +5,43 @@ Router (library mode) and Zustand.
 
 ## Status
 
-The wall renders a tree of panes. Splits, docking and deletion are wired
-through the store and proven not to disturb a pane's iframe. There is no UI to
-drive them yet — that is M4 and M5.
+The wall renders a tree of panes with a draggable splitter between every pair.
+Splits, docking and deletion are wired through the store and proven not to
+disturb a pane's iframe. There is still no UI to create or close a pane — that
+is M5, and until it lands a splitter only appears on a wall that was split
+through the store.
 
 | Milestone | State |
 | --- | --- |
 | M1 — one pane with URL bar, load state, explicit refusal state | done |
 | M2 — pure tree engine: split, delete, resize, dock, invariants | done |
-| M3 — tree rendering with a stable flat pane layer | done, see caveat |
-| M4 — splitter and drag resize | not started |
+| M3 — tree rendering with a stable flat pane layer | done |
+| M4 — splitter and drag resize | done for iframe panes, see below |
 | M5 — per-pane controls and the dock strip | not started |
 | M6 — freeze and suspend policy | not started |
 | M7 — persistence and saved views | not started |
 | M8 — native webview renderer (Tauri) | not started |
 
-**M3 caveat.** The part that matters is proven: a pane's iframe keeps the same
-DOM node and the same parent across split, nested split, dock, undock and
-sibling deletion. Rect *arithmetic* is tested with injected rects. What is not
-yet verified is geometry against a real browser — `getBoundingClientRect`
-returns zero everywhere under happy-dom, so slot measurement and
-`ResizeObserver` have never run for real.
+**What a browser confirmed.** Geometry no longer rests on injected rects alone.
+Against Chromium, with three panes on screen: slots measure non-zero, every pane
+host lands on exactly its slot's rect, resizing the container re-places all three
+through `ResizeObserver` with no change to the tree, and splitting a pane leaves
+its neighbour's iframe at the same rect, on the same DOM node and parent,
+without firing a single `load`.
+
+**What the drag does not cover yet.** While a drag is live the panes stop taking
+the cursor, which is what lets the pointer cross a pane instead of being
+swallowed by it. That is solved for iframe panes only. The suppressor is a class
+on `<body>` paired with a `pointer-events` rule, and CSS does not reach a native
+webview, which is not in the DOM and takes mouse input at the OS level.
+`resize.pointer-capture` is a registry so the webview renderer can add its own
+suppressor; until it does, dragging across a webview pane is unsolved.
+
+In a browser this was checked one step short of the whole gesture: with the drag
+class set, a real pointer move over a pane is delivered to the document that owns
+the splitter, targeting the element behind the frame rather than the frame. The
+complete held-button travel across a pane was not driven, so it rests on that
+plus the headless session tests.
 
 ### Layout library
 
@@ -96,6 +112,7 @@ src/
   geometry/  rect maths, host registry, slot-to-pane sync
   layout/    pane tree: types, pure ops, invariants, serializer, renderer
   pane/      pane UI, URL handling, load state machine, store, pane layer
+  resize/    splitter, drag arithmetic, pane pointer suppression seam
   server/    entrypoint, routes, header probe
 tests/       mirrors src/, plus recorded header fixtures
 ```
