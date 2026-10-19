@@ -150,7 +150,10 @@ flicker; and is a hidden webview throttled.
 
 **Known.** The renderer hides a webview rather than ignoring its pointer events,
 on the comment's account that Tauri has no per-webview equivalent. That claim
-has not been checked against Tauri's API.
+has not been checked against Tauri's API. Commit `39b41a0` hides every webview
+for the length of a splitter drag and shows them again when the drag ends, so
+the pointer reaches the splitter. That is implemented and unit-tested with a
+recording bridge; it has not been seen working on screen.
 
 **Not known.** All three questions.
 
@@ -175,7 +178,10 @@ Then move and resize the window and check again.
 
 **Known.** Each `bun test` run recorded while preparing these changes passed.
 One earlier report had a test failing in one of two runs, but the failing test
-was not recorded.
+was not recorded. Commit `81d9892` is a mitigation, not a confirmed fix: it
+resets the whole store between tests and settles pending probes, and it gives
+the pane-frame waits an explicit 2000 ms budget. No repeated run has been done
+to check it, so the cause is still not proven.
 
 **Not known.** Which test is flaky, or why. Candidates from reading the code,
 none reproduced: the pane frame tests share one global store and use `waitFor`
