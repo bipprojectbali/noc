@@ -5,6 +5,7 @@
 
 import { create } from "zustand";
 
+import { geometryRegistry } from "../geometry/geometry.store.ts";
 import {
   createTree,
   resizeSplit,
@@ -200,6 +201,10 @@ export const useWallStore = create<WallState>((set, get) => {
         // A native webview is not removed by React, because it was never in the
         // DOM. Delete is the only place it is right to destroy one.
         releasePane(paneId);
+        // React drops the host element, but the last rect it was placed at lives
+        // in a plain Map outside React and would otherwise be kept for the life
+        // of the process.
+        geometryRegistry.forget(paneId);
         return { tree, load, urlError };
       });
     },
