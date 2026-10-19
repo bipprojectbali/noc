@@ -121,3 +121,66 @@ tests/       mirrors src/, plus recorded header fixtures
 
 `src/server/server.entry.ts` is the only server entrypoint, shared by the dev
 server and the compiled binary.
+
+## Open items
+
+Four things here are not yet shown to work. Each entry says what is known, what
+is not, and one step that would close it.
+
+### 1. The Tauri shell has not been seen showing YouTube in this build
+
+**Known.** `cargo build` in `src-tauri` finishes with no warnings. In an earlier
+run from a development worktree, before the title bar offset was corrected,
+`https://www.youtube.com` rendered in a native pane and collapsed its sidebar on
+a click. That run is not evidence for the current build.
+
+**Not known.** Whether a page renders and responds in the current build, and
+whether a second URL typed into a pane opens.
+
+**Next step.** Run the app. Load `https://www.youtube.com` in one pane and
+`https://github.com` in another, and check that both render and respond.
+
+### 2. The three measurements on the native webview are unanswered
+
+The questions: does a native webview have a per-view equivalent of
+ignore-cursor-events; does hide and show keep the page's state, and does it
+flicker; and is a hidden webview throttled.
+
+**Known.** The renderer hides a webview rather than ignoring its pointer events,
+on the comment's account that Tauri has no per-webview equivalent. That claim
+has not been checked against Tauri's API.
+
+**Not known.** All three questions.
+
+**Next step.** With a YouTube video playing in a pane, hide the pane, wait about
+a minute, and show it again. Record whether playback continues, pauses or
+reloads, and whether the pane flickers. Compare the process's CPU use while the
+pane is hidden and visible.
+
+### 3. Pane position after the title bar fix is compiled, not seen
+
+**Known.** Commit `1d5a946` adds the window's title bar height to every child
+webview position. The height is read from the window as outer height minus
+content height. The code compiles.
+
+**Not known.** Whether the URL bar is on screen, and whether the top of the page
+meets the bottom of the title bar with no overlap.
+
+**Next step.** Run the app and check the URL bar and the top edge of the page.
+Then move and resize the window and check again.
+
+### 4. The flaky test has no proven cause
+
+**Known.** Each `bun test` run recorded while preparing these changes passed.
+One earlier report had a test failing in one of two runs, but the failing test
+was not recorded.
+
+**Not known.** Which test is flaky, or why. Candidates from reading the code,
+none reproduced: the pane frame tests share one global store and use `waitFor`
+with its default timeout; the probe result is matched by URL only, so two
+submits of the same URL in one pane are not told apart; and the resize pointer
+suppressors live in a module-level set.
+
+**Next step.** Run `bun test` repeatedly in a terminal, outside any automated
+session, for example fifty times in a loop. Keep the output of any run that
+fails.
