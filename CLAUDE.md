@@ -51,6 +51,7 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 
 - Chrome pane (URL bar, tombol) wajib **sibling** dari anchor, bukan overlay — `pane.frame.tsx` + `src/pane/pane.webview-renderer.ts`. Toggle URL bar = event geometri (anchor punya `ResizeObserver` sendiri).
 - **Hide ≠ destroy.** `pane_webview_place(..., visible=false)` mempertahankan halaman; membuat ulang webview = reload, persis yang desain ini cegah. `pane_webview_close` hanya dari `deletePane`.
+- **Hide = suspend gratis** (terbukti dari source WebKit, belum diukur): `hide()` → `setHidden:` (view tetap di hierarchy) → WebKit membersihkan `ActivityState::IsVisible`, jadi rAF ter-suspend, animasi SVG pause, `visibilityState` `"hidden"`, `setTimeout`/`setInterval` ter-align ~1 Hz. Pane tersembunyi nyaris nol CPU, tapi chart berbasis rAF mati total sampai `show()`. Knob `BackgroundThrottlingPolicy` Tauri **tidak** mengatur kasus ini — ia hanya berlaku bagi webview yang *detached* dari view hierarchy.
 - Selama drag splitter, frontend menyembunyikan semua webview lalu menampilkannya lagi (`createWebviewPointerSuppressor`, depth-counted), karena Tauri 2 hanya punya `setIgnoreCursorEvents` level window. Rust tidak punya logika drag — ia hanya menyediakan flag `visible`.
 - `src/resize/resize.pointer-capture.ts` adalah registry suppressor; jangan tambah cabang if/else renderer di situ. Kelas `body.noc-resizing` implementasi iframe saja. Catat: `pane.webview-renderer.ts` mendaftarkan suppressor-nya sebagai efek samping saat modul diimpor.
 - `src/pane/pane.renderer.ts` sengaja menerapkan `place`/`release`/`setCursorCapture` ke **kedua** renderer (no-op bagi yang tak melayani pane) agar layer geometri tak perlu tahu renderer mana yang dipakai.
@@ -90,4 +91,4 @@ Loopback bukan kebetulan: `/api/embeddability` membuat server mem-fetch URL pili
 - **M5 — kontrol create/close pane & dock strip: belum ada.** `splitPane`, `deletePane`, `dockPane`, `undockPane` ada di store tapi **tidak dipanggil dari UI mana pun** (hanya dari test). Jangan anggap itu dead code.
 - Saved views: rute `/view/:viewId` dan tabel sudah ada, store view belum.
 - Varian `{kind:"error"}` di `PaneLoadState` tidak diproduksi reducer mana pun.
-- Shell native belum terlihat jalan di build ini; baca "Open items" di README sebelum mengklaim webview native berfungsi.
+- **Offset title bar masih rusak.** Webview native terbukti merender & interaktif, tapi tiap pane duduk 28 px logis terlalu tinggi (tinggi title bar macOS) karena `chrome_height()` di `src-tauri/src/pane_webview.rs` mengembalikan 0 di macOS — URL bar pane tertutup webview. Jangan klaim renderer webview sudah beres; baca "Open items" di README.

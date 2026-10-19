@@ -18,9 +18,9 @@ through the store.
 | M3 — tree rendering with a stable flat pane layer | done |
 | M4 — splitter and drag resize | done for iframe panes, see below |
 | M5 — per-pane controls and the dock strip | not started |
-| M6 — freeze and suspend policy | not started |
+| M6 — freeze and suspend policy | not started; hiding a webview already suspends it for free, see below |
 | M7 — persistence and saved views | layout restores on reload and saves on change; saved views not started |
-| M8 — native webview renderer (Tauri) | not started |
+| M8 — native webview renderer (Tauri) | panes render, respond and navigate; every pane sits one title bar too high, see below |
 
 **What a browser confirmed.** Geometry no longer rests on injected rects alone.
 Against Chromium, with three panes on screen: slots measure non-zero, every pane
@@ -29,13 +29,14 @@ through `ResizeObserver` with no change to the tree, and splitting a pane leaves
 its neighbour's iframe at the same rect, on the same DOM node and parent,
 without firing a single `load`.
 
-**What the drag does not cover yet.** While a drag is live the panes stop taking
-the cursor, which is what lets the pointer cross a pane instead of being
-swallowed by it. That is solved for iframe panes only. The suppressor is a class
-on `<body>` paired with a `pointer-events` rule, and CSS does not reach a native
-webview, which is not in the DOM and takes mouse input at the OS level.
-`resize.pointer-capture` is a registry so the webview renderer can add its own
-suppressor; until it does, dragging across a webview pane is unsolved.
+**How the drag crosses a pane.** While a drag is live the panes stop taking the
+cursor, which is what lets the pointer cross a pane instead of being swallowed
+by it. For an iframe pane the suppressor is a class on `<body>` paired with a
+`pointer-events` rule. CSS does not reach a native webview, which is not in the
+DOM and takes mouse input at the OS level, so the webview renderer registers its
+own suppressor in the `resize.pointer-capture` registry: it hides every webview
+for the length of the drag and shows them again at the end. Both cases are
+covered, and the webview one was since seen working on screen — see below.
 
 In a browser, a held-button drag was carried across an iframe pane in both
 directions, from the splitter into the right pane and back across the left one.
@@ -122,73 +123,139 @@ tests/       mirrors src/, plus recorded header fixtures
 `src/server/server.entry.ts` is the only server entrypoint, shared by the dev
 server and the compiled binary.
 
+## What the native shell was seen doing
+
+Run with `bun run tauri:dev`, on a two-pane layout seeded through
+`PUT /api/wall`. How each of these was established matters as much as the
+result, so it is recorded with them.
+
+**A site renders, responds, and can be navigated again.**
+`https://www.youtube.com` rendered in full in a native pane — which an iframe
+cannot do, because YouTube refuses to be framed — and `https://example.com` in
+the pane beside it. A click put the caret in YouTube's search box and typed
+characters arrived in it. A second URL, `https://github.com`, typed into the
+same pane navigated that same webview rather than rebuilding it. The `tauri dev`
+log carried no error, no warning and no panic. Screenshots of the run exist
+outside this repository.
+
+**Tauri has no per-webview ignore-cursor-events.** The comment the renderer
+rests on is correct, checked against the installed crate sources (tauri 2.12.4,
+wry 0.57.0, tao 0.37.1). `set_ignore_cursor_events` exists on `Window` and on
+`WebviewWindow`, where it only forwards to the window; `Webview` has no such
+method and `wry` never mentions it. In tao's macOS backend it maps to
+`setIgnoresMouseEvents:` on `NSWindow` — a window property, so it cannot be
+scoped to a child webview at all. The nearest alternatives are
+`accept_first_mouse`, which is not passthrough, and overriding `hitTest:` on the
+raw `WKWebView` through `with_webview`, which is per-webview but hand-rolled.
+
+**Hide and show keep the page, and do not flicker.** Text typed into YouTube's
+search box was still there after three hide/show cycles driven by real splitter
+drags, pane width changes included, and the page did not reload. There was no
+white flash either: while a drag is live, only the wall background shows.
+
+**A hidden webview is suspended by WebKit.** Read from source, not yet measured.
+`Webview::hide()` becomes `WebviewMessage::Hide`, then
+`webview.set_visible(false)`, then `setHidden:` on the `NSView`, which stays
+inside the view hierarchy. WebKit then clears `ActivityState::IsVisible`
+(`PageClientImplMac.mm` tests `isHiddenOrHasHiddenAncestor`), which suspends
+`requestAnimationFrame`, pauses SVG animation, reports `visibilityState` as
+`"hidden"`, and aligns `setTimeout` and `setInterval` to about one second. So
+hide and show are a free suspend and resume: a hidden pane burns almost no CPU,
+but a chart driven by `requestAnimationFrame` stops dead until `show()`, while
+`setTimeout` polling keeps running at roughly 1 Hz. Two notes for M6: Tauri's
+`BackgroundThrottlingPolicy` does not govern this case — per Apple's SDK header
+it applies to a webview detached from the view hierarchy, and a `setHidden:`
+webview is still attached — and an occluded window
+(`NSWindowOcclusionState`) freezes its pages the same way hiding does, while a
+window that merely loses focus but stays visible does not.
+
+## The flaky test was a product bug, not a test problem
+
+Always the same test — `pane layer order is creation order and never shifts > a
+new pane appends after the existing ones` — failing 7 times in 150 runs under
+load. `createdAt` is the pane layer's entire ordering key and `Date.now()` only
+resolves to the millisecond, so two panes created inside one millisecond tied,
+the comparator fell through to the random uuid, and the newer pane sorted first
+about half the time: 1,020 of 2,000 iterations. React then moved an
+already-mounted host, which re-inserts its iframe and reloads the page inside
+it — the exact failure the two-layer design exists to prevent. The test was
+right and the code was wrong.
+
+Commit `f6a80c4` gives the store one producer for the key, `nextCreatedAt()` =
+`Math.max(Date.now(), lastCreatedAt + 1)`, used by every consumer of the
+ordering. A new test forces 20 splits into a single millisecond and fails 5
+times out of 5 with the guard reverted. After the fix: 300 clean runs at normal
+load, and 100 clean runs with the CPU saturated at a load average of 45. The
+earlier mitigation's `PROBE_WAIT_MS = 2000` was deliberately left in place — it
+has nothing to do with this cause, and no `waitFor` failed across 550 runs.
+
 ## Open items
 
-Four things here are not yet shown to work. Each entry says what is known, what
-is not, and one step that would close it.
+Each entry says what is known, what is not, and one step that would close it.
 
-### 1. The Tauri shell has not been seen showing YouTube in this build
+### 1. Every pane webview sits one title bar too high
 
-**Known.** `cargo build` in `src-tauri` finishes with no warnings. In an earlier
-run from a development worktree, before the title bar offset was corrected,
-`https://www.youtube.com` rendered in a native pane and collapsed its sidebar on
-a click. Two screenshots of that run, taken on 19 October at 21:59, show the page
-rendered and the sidebar collapsed after the click. They are kept outside this
-repository. That run is not evidence for the current build.
+This is a measured bug, not an unknown, and it is not fixed.
 
-**Not known.** Whether a page renders and responds in the current build, and
-whether a second URL typed into a pane opens.
+**Known.** Measured off the pixel columns of screenshots and reproduced under
+two different conditions: a webview starts at logical y 60 where it should start
+at 88 — 53 for the top of the window's content, 1 px of border, and the 34 px of
+pane chrome (`--noc-chrome-height`). The difference, 28 logical pixels, is
+exactly the height of the macOS title bar. What it costs: the webview covers the
+pane's URL bar, leaving about 3 px of the input's top edge still clickable, and
+about 28 px of empty wall is left under every pane. Commit `1d5a946` was meant
+to prevent this and does not. `chrome_height()`
+(`src-tauri/src/pane_webview.rs:59-70`) computes `outer_size - inner_size`; on
+macOS those two are equal, so it returns 0 and the correction in `position()`
+(lines 34-50) adds nothing — while a child webview's coordinates are relative to
+the window frame, title bar included.
 
-**Next step.** Run the app. Load `https://www.youtube.com` in one pane and
-`https://github.com` in another, and check that both render and respond.
+**Not known.** Whether that is the whole cause, and where the height should come
+from instead. Nothing has been changed in the shell.
 
-### 2. The three measurements on the native webview are unanswered
+**Next step.** Log `outer_size`, `inner_size` and the window's content rect at
+runtime to confirm the two sizes really are equal, then derive the offset from
+the content rect rather than from their difference, and re-measure the top edge
+of the page against the bottom of the pane chrome.
 
-The questions: does a native webview have a per-view equivalent of
-ignore-cursor-events; does hide and show keep the page's state, and does it
-flicker; and is a hidden webview throttled.
+### 2. A long hide, and `<video>` and WebSocket under one, are not measured
 
-**Known.** The renderer hides a webview rather than ignoring its pointer events,
-on the comment's account that Tauri has no per-webview equivalent. That claim
-has not been checked against Tauri's API. Commit `39b41a0` hides every webview
-for the length of a splitter drag and shows them again when the drag ends, so
-the pointer reaches the splitter. That is implemented and unit-tested with a
-recording bridge; it has not been seen working on screen.
+**Known.** What the source says, above: hidden means not visible, which suspends
+`requestAnimationFrame` and aligns timers to about 1 Hz.
 
-**Not known.** All three questions.
+**Not known.** Whether throttling deepens over minutes, and whether `<video>`
+playback and WebSocket traffic are treated specially.
 
-**Next step.** With a YouTube video playing in a pane, hide the pane, wait about
-a minute, and show it again. Record whether playback continues, pauses or
-reloads, and whether the pane flickers. Compare the process's CPU use while the
-pane is hidden and visible.
+**Next step.** One pane running a `setInterval` and a `requestAnimationFrame`
+that each write a timestamp, hidden for five minutes and then shown. The gaps in
+the two logs answer it.
 
-### 3. Pane position after the title bar fix is compiled, not seen
+### 3. `createdAt` is monotonic only against the values it issued itself
 
-**Known.** Commit `1d5a946` adds the window's title bar height to every child
-webview position. The height is read from the window as outer height minus
-content height. The code compiles.
+**Known.** `nextCreatedAt()` carries its own `lastCreatedAt` and never reads the
+tree. `restoreLayout` puts a stored tree straight into the store, so a layout
+saved while the system clock was ahead — a clock that moves backwards between
+sessions — can hold a `createdAt` larger than `Date.now()`. The first pane
+created after that restore would tie with it or sort before it, and the reorder
+of the entry above comes back.
 
-**Not known.** Whether the URL bar is on screen, and whether the top of the page
-meets the bottom of the title bar with no overlap.
+**Not known.** Whether a clock ever moves backwards here. It has not been
+observed.
 
-**Next step.** Run the app and check the URL bar and the top edge of the page.
-Then move and resize the window and check again.
+**Next step.** Seed `lastCreatedAt` from the largest `createdAt` in the restored
+tree, about two lines in `src/pane/pane.store.ts`. Left undone on purpose: the
+case is unproven.
 
-### 4. The flaky test has no proven cause
+### 4. Loose ends found while verifying, none of them acted on
 
-**Known.** Each `bun test` run recorded while preparing these changes passed.
-One earlier report had a test failing in one of two runs, but the failing test
-was not recorded. Commit `81d9892` is a mitigation, not a confirmed fix: it
-resets the whole store between tests and settles pending probes, and it gives
-the pane-frame waits an explicit 2000 ms budget. No repeated run has been done
-to check it, so the cause is still not proven.
-
-**Not known.** Which test is flaky, or why. Candidates from reading the code,
-none reproduced: the pane frame tests share one global store and use `waitFor`
-with its default timeout; the probe result is matched by URL only, so two
-submits of the same URL in one pane are not told apart; and the resize pointer
-suppressors live in a module-level set.
-
-**Next step.** Run `bun test` repeatedly in a terminal, outside any automated
-session, for example fifty times in a loop. Keep the output of any run that
-fails.
+- `NOC_DB_FILE` is not passed to the sidecar by `sidecar_env()`
+  (`src-tauri/src/sidecar.rs`), so the variable is silently ignored when the app
+  runs under Tauri. The configuration table above does not say that.
+- The `{kind:"error"}` variant in `src/pane/pane.load-state.ts` is produced by no
+  event — a dead variant.
+- `geometryRegistry.forget()` is never called when a pane is released.
+- Seen once: the layout's `sizes` moved on their own from `[0.5, 0.5]` to
+  `[0.5976, 0.4024]` when another application took the window focus. No cause
+  established.
+- After a URL is typed, `currentUrls` reads `null` for both panes while
+  `node.url` is set. Observed, not yet judged.

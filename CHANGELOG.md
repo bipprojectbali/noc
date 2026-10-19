@@ -20,6 +20,13 @@
   against injected rects: panes land on their slots, and a window resize
   re-places them.
 
+### Fixed
+
+- Creating a pane no longer disturbs the pages already on the wall. Two panes
+  created in the same millisecond could come out in the wrong order, which moved
+  a pane that was already on screen and reloaded the site inside it. The order
+  panes were created in is now kept exactly, so the page in a pane stays put.
+
 ## [0.2.0] - 2026-10-19
 
 ### Added
