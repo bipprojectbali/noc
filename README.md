@@ -37,11 +37,11 @@ webview, which is not in the DOM and takes mouse input at the OS level.
 `resize.pointer-capture` is a registry so the webview renderer can add its own
 suppressor; until it does, dragging across a webview pane is unsolved.
 
-In a browser this was checked one step short of the whole gesture: with the drag
-class set, a real pointer move over a pane is delivered to the document that owns
-the splitter, targeting the element behind the frame rather than the frame. The
-complete held-button travel across a pane was not driven, so it rests on that
-plus the headless session tests.
+In a browser, a held-button drag was carried across an iframe pane in both
+directions, from the splitter into the right pane and back across the left one.
+The splitter followed the pointer to the predicted fraction in each case, and a
+plain hover after release moved nothing. Whether the body class or the frame's
+own pointer routing is what keeps the moves flowing was not separated out.
 
 ### Layout library
 
