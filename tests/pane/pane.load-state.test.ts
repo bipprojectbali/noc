@@ -105,6 +105,37 @@ describe("stale events are discarded", () => {
   });
 });
 
+describe("the machine only produces states the union declares", () => {
+  test("no event from any reachable state yields anything but these five kinds", () => {
+    // The union once carried an `error` kind that no event produced. Anything
+    // reachable here is a kind the UI has to handle, so the set is the contract.
+    const kinds = ["empty", "probing", "loading", "ready", "refused"];
+    const reachable: PaneLoadState[] = [
+      INITIAL_PANE_LOAD_STATE,
+      { kind: "probing", url: URL_A },
+      { kind: "loading", url: URL_A },
+      { kind: "ready", url: URL_A },
+      { kind: "refused", url: URL_A, reason: "deny" },
+    ];
+    const events: PaneLoadEvent[] = [
+      { type: "url-set", url: URL_B },
+      { type: "url-cleared" },
+      { type: "probe-settled", url: URL_A, verdict: "allowed", reason: "ok" },
+      { type: "probe-settled", url: URL_A, verdict: "refused", reason: "deny" },
+      { type: "probe-settled", url: URL_A, verdict: "unknown", reason: "odd" },
+      { type: "probe-failed", url: URL_A, reason: "offline" },
+      { type: "frame-loaded", url: URL_A },
+      { type: "reload" },
+    ];
+
+    for (const state of reachable) {
+      for (const event of events) {
+        expect(kinds).toContain(reducePaneLoad(state, event).kind);
+      }
+    }
+  });
+});
+
 describe("clearing and reloading", () => {
   test("clearing returns to empty", () => {
     const state = run([

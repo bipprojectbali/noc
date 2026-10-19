@@ -13,8 +13,7 @@ export type PaneLoadState =
   | { kind: "probing"; url: string }
   | { kind: "loading"; url: string }
   | { kind: "ready"; url: string }
-  | { kind: "refused"; url: string; reason: string }
-  | { kind: "error"; url: string; reason: string };
+  | { kind: "refused"; url: string; reason: string };
 
 export type PaneLoadEvent =
   | { type: "url-set"; url: string }
