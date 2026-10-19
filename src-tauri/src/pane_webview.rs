@@ -32,20 +32,41 @@ pub struct PaneRect {
 }
 
 impl PaneRect {
-    fn position(self) -> LogicalPosition<f64> {
-        LogicalPosition::new(self.x, self.y)
+    /// `chrome` is the window's title bar height, see `chrome_height`.
+    fn position(self, chrome: f64) -> LogicalPosition<f64> {
+        LogicalPosition::new(self.x, self.y + chrome)
     }
 
     fn size(self) -> LogicalSize<f64> {
         LogicalSize::new(self.width, self.height)
     }
 
-    fn bounds(self) -> Rect {
+    fn bounds(self, chrome: f64) -> Rect {
         Rect {
-            position: Position::Logical(self.position()),
+            position: Position::Logical(self.position(chrome)),
             size: Size::Logical(self.size()),
         }
     }
+}
+
+/// Height of the window chrome above the page, in logical pixels.
+///
+/// The page measures its rect from below the title bar, but a child webview is
+/// positioned from the window frame, which still includes the title bar. Left
+/// alone, every pane would sit one title bar too high and cover the URL bar.
+/// The gap is read from the window itself: the outer frame minus the content
+/// area. Nothing here is a hardcoded title bar height.
+fn chrome_height(window: &Window<Wry>) -> Result<f64, String> {
+    let outer = window
+        .outer_size()
+        .map_err(|error| format!("Cannot read the wall window size: {error}"))?;
+    let inner = window
+        .inner_size()
+        .map_err(|error| format!("Cannot read the wall window content size: {error}"))?;
+    let scale = window
+        .scale_factor()
+        .map_err(|error| format!("Cannot read the wall window scale: {error}"))?;
+    Ok(f64::from(outer.height.saturating_sub(inner.height)) / scale)
 }
 
 /// Pane ids come from the wall page, which is loaded over http. Restricting the
@@ -98,10 +119,11 @@ pub fn pane_webview_show(
     }
 
     let window = wall_window(&app)?;
+    let chrome = chrome_height(&window)?;
     window
         .add_child(
             WebviewBuilder::new(&label, WebviewUrl::External(target)),
-            rect.position(),
+            rect.position(chrome),
             rect.size(),
         )
         .map_err(|error| format!("Pane {pane_id} could not get a webview: {error}"))?;
@@ -145,8 +167,9 @@ fn place(
     rect: PaneRect,
     visible: bool,
 ) -> Result<(), String> {
+    let chrome = chrome_height(&webview.window())?;
     webview
-        .set_bounds(rect.bounds())
+        .set_bounds(rect.bounds(chrome))
         .map_err(|error| format!("Pane {pane_id} could not be placed: {error}"))?;
     let shown = if visible { webview.show() } else { webview.hide() };
     shown.map_err(|error| format!("Pane {pane_id} could not change visibility: {error}"))
