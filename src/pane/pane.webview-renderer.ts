@@ -27,6 +27,10 @@ import {
   type NativePaneBridge,
   type NativeRect,
 } from "../native/native.bridge.ts";
+import {
+  registerPanePointerSuppressor,
+  type PanePointerSuppressor,
+} from "../resize/resize.pointer-capture.ts";
 import type { PaneContentProps, PaneRenderer } from "./pane.renderer.ts";
 
 export type AnchorRectReader = (element: HTMLElement) => NativeRect;
@@ -244,7 +248,38 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
   return renderer;
 }
 
+/**
+ * The webview side of the drag seam: hides every webview while any splitter drag
+ * is live, and shows them again when the last one ends.
+ *
+ * Hiding rather than ignoring events, because Tauri v2 offers
+ * `setIgnoreCursorEvents` on the window only. Calls nest: two splitters can be
+ * dragged at once, and the webviews come back only after both have let go.
+ *
+ * Nothing is kept here about which webviews were hidden. A pane is hidden exactly
+ * when its layout asked for it to be visible, so resuming restores precisely
+ * those, at the rect they have now.
+ */
+export function createWebviewPointerSuppressor(
+  renderer: PaneWebviewRenderer,
+): PanePointerSuppressor {
+  let depth = 0;
+  return {
+    suspend: () => {
+      depth += 1;
+      if (depth === 1) renderer.setCursorCapture(false);
+    },
+    resume: () => {
+      if (depth === 0) return;
+      depth -= 1;
+      if (depth === 0) renderer.setCursorCapture(true);
+    },
+  };
+}
+
 /** The renderer the running wall uses. Tests build their own. */
 export const paneWebviewRenderer = createPaneWebviewRenderer({
   bridge: nativePaneBridge,
 });
+
+registerPanePointerSuppressor(createWebviewPointerSuppressor(paneWebviewRenderer));
