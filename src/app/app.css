@@ -25,17 +25,72 @@ body {
   font: 13px/1.4 system-ui, sans-serif;
 }
 
+/* Shared coordinate space for both layers. Pane hosts are positioned against
+   this box, so it must be the containing block. */
 .noc-shell {
-  display: flex;
-  flex-direction: column;
+  position: relative;
   height: 100%;
+  overflow: hidden;
+}
+
+/* Layout layer: the tree, drawn as empty slots. Free to be rebuilt. */
+.noc-layout {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.noc-split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.noc-split--row {
+  flex-direction: row;
+}
+
+.noc-split--column {
+  flex-direction: column;
+}
+
+.noc-split__child {
+  display: flex;
+  flex-basis: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.noc-slot {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Pane layer: above the slots, never reordered, placed imperatively. */
+.noc-pane-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.noc-pane-host {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: auto;
 }
 
 .noc-pane {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  height: 100%;
   min-height: 0;
-  flex: 1;
   border: 1px solid var(--noc-border);
 }
 

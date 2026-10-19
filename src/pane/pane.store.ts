@@ -7,10 +7,22 @@ import { create } from "zustand";
 
 import {
   createTree,
+  resizeSplit,
   setPaneUrl,
   setPaneUrlBarVisible,
+  splitPane,
 } from "../layout/layout.tree.ts";
-import type { LayoutTree, PaneId } from "../layout/layout.types.ts";
+import {
+  deletePane,
+  dockPane,
+  undockPane,
+} from "../layout/layout.remove.ts";
+import type {
+  LayoutTree,
+  NodeId,
+  PaneId,
+  SplitDirection,
+} from "../layout/layout.types.ts";
 import {
   INITIAL_PANE_LOAD_STATE,
   reducePaneLoad,
@@ -30,6 +42,15 @@ export type WallState = {
   clearPane: (paneId: PaneId) => void;
   setUrlBarVisible: (paneId: PaneId, visible: boolean) => void;
   dispatchLoad: (paneId: PaneId, event: PaneLoadEvent) => void;
+  splitPane: (paneId: PaneId, direction: SplitDirection) => void;
+  deletePane: (paneId: PaneId) => void;
+  dockPane: (paneId: PaneId) => void;
+  undockPane: (
+    paneId: PaneId,
+    hostPaneId: PaneId,
+    direction: SplitDirection,
+  ) => void;
+  resizeSplit: (splitId: NodeId, firstFraction: number) => void;
 };
 
 function makeId(): string {
@@ -117,6 +138,43 @@ export const useWallStore = create<WallState>((set, get) => {
           ...state.load,
           [paneId]: reducePaneLoad(paneLoadState(state, paneId), event),
         },
+      }));
+    },
+
+    // Tree actions delegate to the pure functions and keep no logic of their
+    // own, which is what lets the tree be tested without React or a DOM.
+    splitPane: (paneId, direction) => {
+      set((state) => ({
+        tree: splitPane(state.tree, paneId, direction, makeId, Date.now()),
+      }));
+    },
+
+    deletePane: (paneId) => {
+      set((state) => {
+        const tree = deletePane(state.tree, paneId, makeId, Date.now());
+        // Delete is the one place a pane is meant to die, so its transient
+        // state goes with it instead of leaking into the next pane.
+        const { [paneId]: _droppedLoad, ...load } = state.load;
+        const { [paneId]: _droppedError, ...urlError } = state.urlError;
+        return { tree, load, urlError };
+      });
+    },
+
+    dockPane: (paneId) => {
+      set((state) => ({
+        tree: dockPane(state.tree, paneId, makeId, Date.now()),
+      }));
+    },
+
+    undockPane: (paneId, hostPaneId, direction) => {
+      set((state) => ({
+        tree: undockPane(state.tree, paneId, hostPaneId, direction, makeId),
+      }));
+    },
+
+    resizeSplit: (splitId, firstFraction) => {
+      set((state) => ({
+        tree: resizeSplit(state.tree, splitId, firstFraction),
       }));
     },
   };
