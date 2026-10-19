@@ -132,7 +132,9 @@ is not, and one step that would close it.
 **Known.** `cargo build` in `src-tauri` finishes with no warnings. In an earlier
 run from a development worktree, before the title bar offset was corrected,
 `https://www.youtube.com` rendered in a native pane and collapsed its sidebar on
-a click. That run is not evidence for the current build.
+a click. Two screenshots of that run, taken on 19 October at 21:59, show the page
+rendered and the sidebar collapsed after the click. They are kept outside this
+repository. That run is not evidence for the current build.
 
 **Not known.** Whether a page renders and responds in the current build, and
 whether a second URL typed into a pane opens.
