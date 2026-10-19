@@ -138,7 +138,12 @@ export function ResizeSplitter({
         fractionAt(session, { x: moveEvent.clientX, y: moveEvent.clientY }),
       );
     };
-    const onRelease = (): void => endSession(false);
+    // Only the pointer that began the drag may end it. A second finger lifting
+    // is not the user letting go of the splitter.
+    const onRelease = (releaseEvent: globalThis.PointerEvent): void => {
+      if (sessionRef.current?.pointerId !== releaseEvent.pointerId) return;
+      endSession(false);
+    };
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onRelease);

@@ -143,6 +143,19 @@ describe("constraint 2: the panes stop taking the cursor during a drag", () => {
     expect(document.body.classList.contains(RESIZING_BODY_CLASS)).toBe(false);
   });
 
+  test("a second pointer lifting does not end the drag", async () => {
+    const { splitter } = await splitScene("row");
+    down(splitter, 500, 300);
+
+    fireEvent.pointerUp(splitter, { pointerId: 2 });
+    fireEvent.pointerCancel(splitter, { pointerId: 2 });
+    expect(document.body.classList.contains(RESIZING_BODY_CLASS)).toBe(true);
+
+    // The first pointer is still down, so its moves must still resize.
+    move(splitter, 500 + TRACK / 10, 300);
+    expect(firstFraction()).toBeCloseTo(0.6, 10);
+  });
+
   test("losing the splitter mid-drag releases the panes too", async () => {
     const { splitter } = await splitScene();
     down(splitter, 500, 300);
