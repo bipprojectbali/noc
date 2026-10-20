@@ -14,11 +14,23 @@
   box-sizing: border-box;
 }
 
+/* The wall is a fixed grid of viewports, never a document — nothing outside a
+   pane may scroll or bounce. A wheel an iframe pane cannot absorb (its page
+   fits the pane, or it already reached the end) chains out to this document,
+   and macOS answers it on the wall itself: `overscroll-behavior: none` removes
+   that elastic bounce, `overflow: hidden` removes any real scroll it could
+   find. Both matter because panes are placed in viewport coordinates by
+   `geometry.sync`, which has no scroll listener — a document that moves drags
+   every pane off its slot, which reads as "the whole page scrolls, the pane
+   does not". A native webview pane is a separate top-level document and never
+   chains here, so this governs the iframe renderer only. */
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
