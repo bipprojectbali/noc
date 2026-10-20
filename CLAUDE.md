@@ -6,7 +6,7 @@ README = produk & milestone untuk manusia. File ini = perintah, invariant, jebak
 ## Perintah
 
 - `bun install` · `bun run dev` (hot, http://127.0.0.1:7788) · `bun run start` (tanpa hot)
-- `bun test` (17 file `*.test.ts(x)` di `tests/`) · `bun run typecheck` (`tsc --noEmit`)
+- `bun test` (23 file `*.test.ts(x)` di `tests/`) · `bun run typecheck` (`tsc --noEmit`)
 - `bun run build:sidecar` → `scripts/sidecar.build.ts` menghasilkan `src-tauri/binaries/noc-server-<triple>`; triple dari `rustc --print host-tuple`
 - `bun run tauri:dev` / `tauri:build` — keduanya menjalankan `build:sidecar` lewat `beforeDevCommand`/`beforeBuildCommand`
 - `bun run build:binary` → `dist/noc` standalone, **bukan** yang dipakai Tauri
@@ -23,7 +23,8 @@ src/pane/     UI pane (tombol ⋮ + menu panel), URL, state machine load, store,
 src/persist/  port persist, client HTTP, repository SQLite, snapshot, writer
 src/resize/   splitter, aritmetika drag, seam penekan pointer
 src/server/   entrypoint, routes, probe header, ready line, parent watch
-src-tauri/src 3 file Rust (403 baris): main.rs, sidecar.rs, pane_webview.rs
+src/session/  impor cookie: types, parser murni, store zustand sendiri, item menu
+src-tauri/src 4 file Rust (570 baris): main.rs, sidecar.rs, pane_webview.rs, cookie_import.rs
 tests/        mirror src/ + tests/setup/ + tests/fixtures/
 ```
 
@@ -63,7 +64,12 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 
 **4. Handshake sidecar lewat stdout.** Rust men-spawn server dengan `NOC_PORT=0`, mem-parse baris `noc-ready <url>` untuk tahu port nyata, dan baru itu membuka window wall. Prefix terduplikasi sebagai literal di `src/server/server.ready.ts` dan `src-tauri/src/sidecar.rs` — **ubah keduanya bersama.** Server tidak pernah pindah port diam-diam: port terpakai = exit 1. Sidecar mengawasi `NOC_PARENT_PID` (signal 0, poll 1 s) agar tak jadi orphan; jangan andalkan parent membunuh child — force-quit tak pernah sampai ke kode itu.
 
-**5. Permukaan frontend→native hanya 3 `invoke`:** `pane_webview_show|place|close`, lewat `src/native/native.bridge.ts` saja. Tidak ada `emit`/`listen` dua arah — jangan tambahkan tanpa alasan kuat. Tiap command baru butuh entri di `src-tauri/capabilities/default.json` (wall page adalah origin remote `http://127.0.0.1:*`).
+**5. Permukaan frontend→native hanya 4 `invoke`:** `pane_webview_show|place|close` plus `cookie_import`, lewat `src/native/native.bridge.ts` saja. Tidak ada `emit`/`listen` dua arah — jangan tambahkan tanpa alasan kuat. Tiap command baru butuh **dua** entri: nama di `COMMANDS` (`src-tauri/build.rs`) yang membangkitkan permission `allow-*`, dan permission itu di `src-tauri/capabilities/default.json` — lupa yang pertama membuat build gagal dengan "Permission … not found" (wall page adalah origin remote `http://127.0.0.1:*`).
+
+- `cookie_import` (`src-tauri/src/cookie_import.rs`) menanam cookie ekspor browser ke cookie store WebKit supaya pane tak minta login ulang. Ia **global, bukan per pane**: pane dibangun dengan `WebviewBuilder` polos — tanpa `incognito`, tanpa `data_store_identifier` — jadi semua berbagi `WKWebsiteDataStore::defaultDataStore`, dan webview window wall adalah pegangan yang sama atas store itu. Sekali impor berlaku untuk seluruh dinding.
+- **Command ini membaca ulang store, dan itu bukan paranoia.** `Webview::set_cookie` fire-and-forget satu lapis di bawah: Tauri mengembalikan `Ok(())` begitu pesan masuk antrean, dan kalau WebKit menolak cookie-nya tauri-runtime-wry cuma menulis `log::error!`. Jadi yang dilaporkan adalah hasil `cookies()` sesudahnya (`stored`, `failedDomains`), bukan jumlah yang dikirim. Jangan "sederhanakan" jadi menghitung input.
+- Command-nya `async` dengan sengaja: membaca cookie store memblokir sampai WebKit menjawab, dan Tauri mendokumentasikan itu deadlock bila dilakukan dari command sinkron di Windows. Input divalidasi (`usable`) karena `NSHTTPCookie::cookieWithProperties` mengembalikan nil untuk dictionary cacat dan wry mengubah nil itu jadi `expect` — panik yang menjatuhkan shell. `SameSite::None` di-drop wry di macOS; itu batas upstream, bukan bug di sini.
+- Sisi web-nya **bukan** di `pane.store`: `src/session/session.store.ts` punya store zustand sendiri (parse → `nativeCookieBridge.importCookies` → `reloadEveryPane`) karena impor itu global untuk dinding, bukan milik satu pane. `session.store` boleh mengimpor `pane.store`; sebaliknya tidak pernah. **Reload sesudah impor bukan pemanis** — cookie yang ditanam tak berefek pada halaman yang sudah terlanjut dimuat, jadi tanpa itu fitur terlihat gagal total. `SessionCookie` (`session.types.ts`) satu-satunya deklarasi baris cookie; `native.bridge.ts` mengimpornya, jangan deklarasikan ulang.
 
 ## Konvensi kode
 
@@ -74,7 +80,7 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 - Pola port yang bisa di-inject: `createX(deps)` + singleton terpisah di file yang sama — `PaneRenderer`, `NativePaneBridge`, `WallPersistPort`, `PanePointerSuppressor`, `RectReader`, `GeometryRegistry`. Test membangun miliknya sendiri; jangan mem-mock modul.
 - Error memakai result-type (`{ok:true,...} | {ok:false, reason}`) bukan throw; throw hanya untuk input user/operator yang salah (`readConfig`, `splitPane` pada pane docked).
 - Tiap file dibuka docblock **"kenapa"**, bukan "apa". Pertahankan pola itu — komentar-komentar itulah yang mencegah invariant di atas "dibetulkan".
-- `data-testid` di tiap elemen penting: `slot-`, `split-`, `splitter-`, `pane-frame-`, `pane-host-`, `pane-webview-`, `pane-empty-`, `pane-refused-`, `pane-chrome-`, `pane-menu-button-`, `pane-menu-`, `pane-strategy-`, `pane-reload-`, `pane-split-row-`/`pane-split-column-`, `pane-close-`.
+- `data-testid` di tiap elemen penting: `slot-`, `split-`, `splitter-`, `pane-frame-`, `pane-host-`, `pane-webview-`, `pane-empty-`, `pane-refused-`, `pane-chrome-`, `pane-menu-button-`, `pane-menu-`, `pane-strategy-`, `pane-reload-`, `pane-split-row-`/`pane-split-column-`, `pane-close-`, `pane-import-cookies-` (+ `-input-`/`-status-`).
 
 ## Jebakan test
 
@@ -96,5 +102,6 @@ Loopback bukan kebetulan: `/api/embeddability` membuat server mem-fetch URL pili
 - **Tombol ⋮ mengambang + menu panel BELUM pernah dilihat di layar.** `pane.menu.tsx` dan `pane.menu-panel.tsx` memanggil `submitUrl`/`reloadPane`/`setPaneStrategy`/`splitPane`/`deletePane` dari UI, dan test-nya hijau — tapi hijau di happy-dom tidak membuktikan apa pun soal geometri atau tata letak (lihat "Jebakan test"). Nol bukti visual untuk: body pane benar-benar edge-to-edge, tombol terbaca di atas situs terang maupun gelap, dropdown 224 px muat di pane tersempit, dan seam 20 px pane webview. Jangan tulis "M5 beres"; yang bisa dikatakan hanya "ada dan ter-unit-test".
 - **Blanking saat menu terbuka belum pernah dinilai di layar.** Bahwa semua webview hilang selama panel terbuka itu desain, bukan bug; apakah itu tertahankan atau mengganggu hanya bisa dijawab dengan memakainya. Jalan keluar bila mengganggu: menu native lewat `invoke` keempat — jangan tempuh sebelum ada bukti pemakaian nyata.
 - **Switch renderer per pane (`<select>` di `pane.menu-panel.tsx`) juga belum dilihat di layar.** Status yang sama: `setPaneStrategy`, `rendererChange`, skip probe, dan teks refusal bercabang semuanya ter-test, nol bukti visual.
+- **Impor cookie: nol bukti runtime.** `cargo check` lulus, `cargo run` belum — tak satu cookie pun pernah sampai ke `WKWebsiteDataStore` dari kode ini, jadi penerimaan WebKit dan pencocokan read-back (`identity`: nama + host tanpa titik depan + value) belum terbukti; semua fixture parser ditulis tangan, belum ada ekspor ekstensi sungguhan. Barisnya sendiri juga belum pernah dilihat: tempatnya di dropdown 224 px, dialog file di atas pane native, dan teks hasil saat beberapa domain gagal.
 - **Minimise & dock strip sudah dihapus dari UI, tapi `dockPane`/`undockPane` (dan `setUrlBarVisible`) tetap ada di store tanpa pemanggil UI.** Itu gap yang didokumentasikan, **bukan dead code** — menghapusnya merembet ke `layout.types.ts`, `layout.remove.ts`, `layout.tree.ts`, `layout.invariants.ts`, `layout.serializer.ts`, `persist.rows.ts`, `persist.migrations.ts`, dan tabel `dock`: itu perubahan schema, bukan beberes. Docblock di `pane.store.ts` menjelaskan alasannya; jangan "bersihkan" tanpa migrasi.
 - Saved views: rute `/view/:viewId` dan tabel sudah ada, store view belum.

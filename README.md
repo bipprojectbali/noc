@@ -12,9 +12,10 @@ top-right corner of an iframe pane and costing it no height at all; it opens a
 dropdown holding the address field, the renderer picker, Reload, Split right,
 Split down and Close. Each pane can be drawn as an iframe or as a native
 webview, and a webview pane keeps a 20px seam for its button because an
-OS-level view cannot be drawn over. All of it is built and unit-tested; none of
-it has been seen on screen. The desktop shell is real: it runs the server as a
-sidecar and puts a native webview in each pane.
+OS-level view cannot be drawn over. The menu also carries Import cookies, which
+signs every native pane in at once from a browser export. All of it is built
+and unit-tested; none of it has been seen on screen. The desktop shell is real:
+it runs the server as a sidecar and puts a native webview in each pane.
 
 | Milestone | State |
 | --- | --- |
@@ -48,6 +49,26 @@ directions, from the splitter into the right pane and back across the left one.
 The splitter followed the pointer to the predicted fraction in each case, and a
 plain hover after release moved nothing. Whether the body class or the frame's
 own pointer routing is what keeps the moves flowing was not separated out.
+
+**Why a pane asks you to log in again, and which half of that is fixable.** The
+two renderers fail for different reasons, and only one of them is ours to
+answer. A pane drawn as an **iframe** is a cross-site context: an ordinary
+`SameSite=Lax` session cookie is in the browser's jar and is simply never sent
+there. Nothing in this app can change that, and copying the cookie in would not
+help, because it is not the cookie that is missing — it is the browser's
+willingness to attach it. Only the site can lift that, by issuing the cookie as
+`SameSite=None; Secure; Partitioned`. A pane drawn as a **native webview** is a
+top-level document, where `SameSite` does not apply, and that is where the
+import works: export cookies from your own browser with any extension that
+writes a Netscape `cookies.txt` or a JSON array, pick the file from "Import
+cookies…" in any pane's menu, and they are planted in the WebKit store every
+pane webview shares. One import therefore covers the whole wall. Every pane is
+reloaded afterwards, because a cookie planted under a page already on screen
+changes nothing until that page is fetched again. The shell reads the store
+back and reports what it really holds rather than what was posted to it, since
+`set_cookie` is fire-and-forget a layer below and reports nothing; domains that
+did not take are named, because those are the sites still to be signed into by
+hand. Never run — see "Open items".
 
 ### Layout library
 
@@ -122,6 +143,7 @@ src/
   pane/      pane UI (⋮ button and menu), URL handling, load state machine, store, pane layer
   resize/    splitter, drag arithmetic, pane pointer suppression seam
   server/    entrypoint, routes, header probe
+  session/   cookie import: export parser (pure), its own store, menu item
 tests/       mirrors src/, plus recorded header fixtures
 ```
 
@@ -269,7 +291,7 @@ position. No fourth `invoke` and no native menu were added — the cheap path
 first, revisited only if the blanking proves annoying.
 
 **Not known.** Everything visual. The suite runs under happy-dom, which measures
-every element at zero width and height, so none of its 216 passing assertions
+every element at zero width and height, so none of its 272 passing tests
 says that an iframe pane's body really runs edge to edge, that the ⋮ is legible
 over an actual bright website or lost over a dark one, that 14% opacity is
 "nearly invisible" rather than "invisible", that the 224px dropdown fits inside
@@ -323,7 +345,35 @@ pane's own bar on macOS has been dropped — it was true only while
 the webview's anchor, never across it. "reloads" stays in the label, because
 switching really does reload.
 
-### 3. A long hide, and `<video>` and WebSocket under one, are not measured
+### 3. Cookie import has never been on screen, and no cookie has ever been planted
+
+**Known.** The pieces exist and are unit-tested end to end in isolation: the
+parser reads both export shapes and drops a bad row without losing the good
+ones around it, the bridge turns a rejected `invoke` into a result rather than
+a throw, the store parses then imports then reloads every pane with an address,
+and the menu row is disabled outside the shell with the reason written on it.
+The Rust side compiles — `cargo check` passes, and the command is registered in
+both places it has to be, `COMMANDS` in `build.rs` and the capability file.
+
+**Not known.** Everything that only a run can answer. `cargo run` has not
+happened, so no cookie has ever reached `WKWebsiteDataStore` from this code:
+whether WebKit accepts the cookies as written, whether the read-back identity
+match (name, host without its leading dot, value) recognises what WebKit
+normalised, whether a wall-wide reload of several webviews at once is smooth or
+a stampede, and whether a real export from a real extension parses at all —
+every fixture in the suite was written by hand. Nor has the row been seen: not
+its place in the 224px dropdown, not the file dialog over a native pane, not
+the outcome text at that width when several domains failed.
+
+**Next step.** `bun run tauri:dev` with two native panes on a site you are
+signed into in your own browser, export that browser's cookies, and import
+them. Three things to watch: that the count reported is plausible rather than
+zero, that the panes come back signed in after the automatic reload, and that
+a deliberately broken file produces the worded error instead of silence. Then
+put the same site in an iframe pane and confirm it still asks for a login —
+that is the expected result, not a regression.
+
+### 4. A long hide, and `<video>` and WebSocket under one, are not measured
 
 **Known.** What the source says, above: hidden means not visible, which suspends
 `requestAnimationFrame` and aligns timers to about 1 Hz.
@@ -335,7 +385,7 @@ playback and WebSocket traffic are treated specially.
 that each write a timestamp, hidden for five minutes and then shown. The gaps in
 the two logs answer it.
 
-### 4. `createdAt` is monotonic only against the values it issued itself
+### 5. `createdAt` is monotonic only against the values it issued itself
 
 **Known.** `nextCreatedAt()` carries its own `lastCreatedAt` and never reads the
 tree. `restoreLayout` puts a stored tree straight into the store, so a layout
@@ -351,7 +401,7 @@ observed.
 tree, about two lines in `src/pane/pane.store.ts`. Left undone on purpose: the
 case is unproven.
 
-### 5. Loose ends found while verifying, still open
+### 6. Loose ends found while verifying, still open
 
 The three code-level ones from this list are now closed: `sidecar_env()` passes
 `NOC_DB_FILE` through, the dead `{kind:"error"}` variant is gone from
