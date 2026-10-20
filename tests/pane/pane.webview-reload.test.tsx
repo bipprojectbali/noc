@@ -27,15 +27,15 @@ const RECT: NativeRect = { x: 10, y: 20, width: 300, height: 200 };
 const URL_ONE = "https://example.com/";
 
 type Call =
-  | { op: "show"; paneId: PaneId; url: string }
+  | { op: "show"; paneId: PaneId; url: string; visible: boolean | undefined }
   | { op: "place"; paneId: PaneId; visible: boolean }
   | { op: "close"; paneId: PaneId };
 
 function recordingBridge(): { bridge: NativePaneBridge; calls: Call[] } {
   const calls: Call[] = [];
   const bridge: NativePaneBridge = {
-    show: async (paneId, url) => {
-      calls.push({ op: "show", paneId, url });
+    show: async (paneId, url, _rect, _navigate, visible) => {
+      calls.push({ op: "show", paneId, url, visible });
     },
     place: async (paneId, _rect, visible) => {
       calls.push({ op: "place", paneId, visible });
@@ -52,8 +52,11 @@ async function settle(): Promise<void> {
   for (let i = 0; i < 5; i += 1) await Promise.resolve();
 }
 
-function opsFor(calls: Call[], op: Call["op"]): Call[] {
-  return calls.filter((call) => call.op === op);
+function opsFor<T extends Call["op"]>(
+  calls: Call[],
+  op: T,
+): Extract<Call, { op: T }>[] {
+  return calls.filter((call): call is Extract<Call, { op: T }> => call.op === op);
 }
 
 describe("reopen navigates a webview that is already there", () => {
@@ -67,15 +70,17 @@ describe("reopen navigates a webview that is already there", () => {
     renderer.place("p1", true);
     await settle();
     expect(opsFor(calls, "show")).toEqual([
-      { op: "show", paneId: "p1", url: URL_ONE },
+      { op: "show", paneId: "p1", url: URL_ONE, visible: false },
     ]);
 
     renderer.reopen("p1");
     await settle();
 
     expect(opsFor(calls, "show")).toEqual([
-      { op: "show", paneId: "p1", url: URL_ONE },
-      { op: "show", paneId: "p1", url: URL_ONE },
+      // Opened before the layout had placed the pane, so the first call asked
+      // for nothing on screen; by the reload the pane has a rect and is shown.
+      { op: "show", paneId: "p1", url: URL_ONE, visible: false },
+      { op: "show", paneId: "p1", url: URL_ONE, visible: true },
     ]);
     // Destroying and rebuilding would reload too, and would throw away
     // everything the page holds. The view must survive its own reload.
@@ -93,13 +98,18 @@ describe("reopen navigates a webview that is already there", () => {
     renderer.reopen("p2");
     await settle();
 
-    // The shell shows a webview it navigates, so the follow-up place has to put
-    // it back out of sight.
-    expect(opsFor(calls, "place").at(-1)).toEqual({
-      op: "place",
+    // The shell is told on the `show` itself, not corrected afterwards: a
+    // navigate that showed the view first would put a hidden page on screen
+    // for the length of one IPC round-trip.
+    expect(opsFor(calls, "show").at(-1)).toEqual({
+      op: "show",
       paneId: "p2",
+      url: URL_ONE,
       visible: false,
     });
+    expect(opsFor(calls, "place").every((call) => call.visible === false)).toBe(
+      true,
+    );
   });
 
   test("a pane with no url, and a pane the renderer never saw, reach nothing", async () => {

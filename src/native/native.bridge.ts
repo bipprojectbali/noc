@@ -36,12 +36,20 @@ export type NativePaneBridge = {
    * reloads, so without that the first call after a reload would send every
    * pane back to the address the layout holds, discarding wherever the user had
    * browsed to and any session they had logged into there.
+   *
+   * `visible` is asked for here rather than left to the follow-up `place`,
+   * because a pane holds several pages and only one of them is on screen. The
+   * shell used to show every webview it opened or navigated, so each background
+   * page flashed over the active one until the correction arrived an IPC
+   * round-trip later — once per page on every wall reload. Left out it still
+   * means "show", which is what a single-page caller wants.
    */
   show: (
     paneId: PaneId,
     url: string,
     rect: NativeRect,
     navigate?: boolean,
+    visible?: boolean,
   ) => Promise<void>;
   /** Moves it and sets whether it is on screen. Hiding never destroys it. */
   place: (paneId: PaneId, rect: NativeRect, visible: boolean) => Promise<void>;
@@ -96,8 +104,8 @@ export function createNativePaneBridge(
   deps: NativePaneBridgeDeps,
 ): NativePaneBridge {
   return {
-    show: (paneId, url, rect, navigate) =>
-      deps.invoke("pane_webview_show", { paneId, url, rect, navigate }),
+    show: (paneId, url, rect, navigate, visible) =>
+      deps.invoke("pane_webview_show", { paneId, url, rect, navigate, visible }),
     place: (paneId, rect, visible) =>
       deps.invoke("pane_webview_place", { paneId, rect, visible }),
     close: (paneId) => deps.invoke("pane_webview_close", { paneId }),

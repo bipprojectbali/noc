@@ -192,6 +192,14 @@ fn parse_url(pane_id: &str, url: &str) -> Result<tauri::Url, String> {
 /// tell a first call from a repeat one: the page that tracks which panes it has
 /// opened is itself reloadable, and a reload of it would otherwise send every
 /// pane back to the address the layout holds. See `PaneNavigations`.
+///
+/// `visible` is what the caller wants on screen once this call is done, and it
+/// has to be asked here rather than left to the `place` that follows. A pane
+/// holds several pages and shows one: opening or navigating always showed the
+/// webview, so each of a pane's background pages painted over the active one
+/// until the caller's correction arrived an IPC round-trip later — once per
+/// page on every wall reload. Unset means show, which is what a caller holding
+/// a single page means.
 #[tauri::command]
 pub fn pane_webview_show(
     app: AppHandle,
@@ -199,10 +207,12 @@ pub fn pane_webview_show(
     url: String,
     rect: PaneRect,
     navigate: Option<bool>,
+    visible: Option<bool>,
 ) -> Result<(), String> {
     let label = pane_label(&pane_id)?;
     let target = parse_url(&pane_id, &url)?;
     let history = app.state::<PaneNavigations>();
+    let visible = visible.unwrap_or(true);
 
     if let Some(webview) = pane_webview(&app, &label) {
         if navigate == Some(true) || !history.is_current(&label, &url) {
@@ -211,12 +221,12 @@ pub fn pane_webview_show(
                 .map_err(|error| format!("Pane {pane_id} could not navigate: {error}"))?;
             history.remember(&label, &url);
         }
-        return place(&webview, &pane_id, rect, true);
+        return place(&webview, &pane_id, rect, visible);
     }
 
     let window = wall_window(&app)?;
     let chrome = chrome_height(&window)?;
-    window
+    let webview = window
         .add_child(
             WebviewBuilder::new(&label, WebviewUrl::External(target)),
             rect.position(chrome),
@@ -224,6 +234,14 @@ pub fn pane_webview_show(
         )
         .map_err(|error| format!("Pane {pane_id} could not get a webview: {error}"))?;
     history.remember(&label, &url);
+    // A new webview is shown by the window system. Hiding it is not suspending
+    // the load: the view stays in the hierarchy and the document still arrives,
+    // which is exactly what a page kept warm behind its sibling is for.
+    if !visible {
+        webview
+            .hide()
+            .map_err(|error| format!("Pane {pane_id} could not be hidden: {error}"))?;
+    }
     Ok(())
 }
 
