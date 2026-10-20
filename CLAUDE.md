@@ -6,7 +6,7 @@ README = produk & milestone untuk manusia. File ini = perintah, invariant, jebak
 ## Perintah
 
 - `bun install` · `bun run dev` (hot, http://127.0.0.1:7788) · `bun run start` (tanpa hot)
-- `bun test` (18 file `*.test.ts(x)` di `tests/`) · `bun run typecheck` (`tsc --noEmit`)
+- `bun test` (23 file `*.test.ts(x)` di `tests/`) · `bun run typecheck` (`tsc --noEmit`)
 - `bun run build:sidecar` → `scripts/sidecar.build.ts` menghasilkan `src-tauri/binaries/noc-server-<triple>`; triple dari `rustc --print host-tuple`
 - `bun run tauri:dev` / `tauri:build` — keduanya menjalankan `build:sidecar` lewat `beforeDevCommand`/`beforeBuildCommand`
 - `bun run build:binary` → `dist/noc` standalone, **bukan** yang dipakai Tauri
@@ -23,7 +23,7 @@ src/pane/     UI pane (tombol ⋮ + menu panel), URL, state machine load, store,
 src/persist/  port persist, client HTTP, repository SQLite, snapshot, writer
 src/resize/   splitter, aritmetika drag, seam penekan pointer
 src/server/   entrypoint, routes, probe header, ready line, parent watch
-src/session/  impor cookie: types, parser murni, store zustand sendiri
+src/session/  impor cookie: types, parser murni, store zustand sendiri, item menu + registry hook
 src-tauri/src 4 file Rust (570 baris): main.rs, sidecar.rs, pane_webview.rs, cookie_import.rs
 tests/        mirror src/ + tests/setup/ + tests/fixtures/
 ```
@@ -80,7 +80,7 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 - Pola port yang bisa di-inject: `createX(deps)` + singleton terpisah di file yang sama — `PaneRenderer`, `NativePaneBridge`, `WallPersistPort`, `PanePointerSuppressor`, `RectReader`, `GeometryRegistry`. Test membangun miliknya sendiri; jangan mem-mock modul.
 - Error memakai result-type (`{ok:true,...} | {ok:false, reason}`) bukan throw; throw hanya untuk input user/operator yang salah (`readConfig`, `splitPane` pada pane docked).
 - Tiap file dibuka docblock **"kenapa"**, bukan "apa". Pertahankan pola itu — komentar-komentar itulah yang mencegah invariant di atas "dibetulkan".
-- `data-testid` di tiap elemen penting: `slot-`, `split-`, `splitter-`, `pane-frame-`, `pane-host-`, `pane-webview-`, `pane-empty-`, `pane-refused-`, `pane-chrome-`, `pane-menu-button-`, `pane-menu-`, `pane-strategy-`, `pane-reload-`, `pane-split-row-`/`pane-split-column-`, `pane-close-`.
+- `data-testid` di tiap elemen penting: `slot-`, `split-`, `splitter-`, `pane-frame-`, `pane-host-`, `pane-webview-`, `pane-empty-`, `pane-refused-`, `pane-chrome-`, `pane-menu-button-`, `pane-menu-`, `pane-strategy-`, `pane-reload-`, `pane-split-row-`/`pane-split-column-`, `pane-close-`, `pane-import-cookies-` (+ `-input-`/`-status-`).
 
 ## Jebakan test
 
@@ -102,5 +102,6 @@ Loopback bukan kebetulan: `/api/embeddability` membuat server mem-fetch URL pili
 - **Tombol ⋮ mengambang + menu panel BELUM pernah dilihat di layar.** `pane.menu.tsx` dan `pane.menu-panel.tsx` memanggil `submitUrl`/`reloadPane`/`setPaneStrategy`/`splitPane`/`deletePane` dari UI, dan test-nya hijau — tapi hijau di happy-dom tidak membuktikan apa pun soal geometri atau tata letak (lihat "Jebakan test"). Nol bukti visual untuk: body pane benar-benar edge-to-edge, tombol terbaca di atas situs terang maupun gelap, dropdown 224 px muat di pane tersempit, dan seam 20 px pane webview. Jangan tulis "M5 beres"; yang bisa dikatakan hanya "ada dan ter-unit-test".
 - **Blanking saat menu terbuka belum pernah dinilai di layar.** Bahwa semua webview hilang selama panel terbuka itu desain, bukan bug; apakah itu tertahankan atau mengganggu hanya bisa dijawab dengan memakainya. Jalan keluar bila mengganggu: menu native lewat `invoke` keempat — jangan tempuh sebelum ada bukti pemakaian nyata.
 - **Switch renderer per pane (`<select>` di `pane.menu-panel.tsx`) juga belum dilihat di layar.** Status yang sama: `setPaneStrategy`, `rendererChange`, skip probe, dan teks refusal bercabang semuanya ter-test, nol bukti visual.
+- **Impor cookie: nol bukti runtime, dan satu kabel belum tersambung.** `cargo check` lulus, `cargo run` belum — tak satu cookie pun pernah sampai ke `WKWebsiteDataStore` dari kode ini, jadi penerimaan WebKit dan pencocokan read-back (`identity`: nama + host tanpa titik depan + value) belum terbukti; semua fixture parser ditulis tangan, belum ada ekspor ekstensi sungguhan. Lebih keras dari itu: **`setSessionImportHook` tak pernah dipanggil di `src/`** — hanya di test — jadi `useSessionStore` belum terpakai di app yang jalan dan baris menu membuka file picker lalu diam total (state tetap `idle` = nol pesan). Sambungkan dulu (arahkan registry ke `useSessionStore` saat app start, atau hapus registry-nya dan impor store langsung seperti yang dijanjikan docblock `session.store-contract.ts`) sebelum menilai apa pun di layar.
 - **Minimise & dock strip sudah dihapus dari UI, tapi `dockPane`/`undockPane` (dan `setUrlBarVisible`) tetap ada di store tanpa pemanggil UI.** Itu gap yang didokumentasikan, **bukan dead code** — menghapusnya merembet ke `layout.types.ts`, `layout.remove.ts`, `layout.tree.ts`, `layout.invariants.ts`, `layout.serializer.ts`, `persist.rows.ts`, `persist.migrations.ts`, dan tabel `dock`: itu perubahan schema, bukan beberes. Docblock di `pane.store.ts` menjelaskan alasannya; jangan "bersihkan" tanpa migrasi.
 - Saved views: rute `/view/:viewId` dan tabel sudah ada, store view belum.

@@ -4,6 +4,23 @@
 
 ### Added
 
+- Import the cookies from the browser you are already signed into, so a pane
+  stops asking you to log in again. Export them with whatever extension you
+  already have — a Netscape `cookies.txt` or a JSON array — then pick the file
+  from "Import cookies…" in any pane's menu. One import serves the whole wall,
+  because every native pane shares a single cookie store, and every pane
+  reloads afterwards: cookies planted under a page already on screen change
+  nothing until that page is fetched again. The count you are shown is what
+  the store really held afterwards rather than what was sent to it, and any
+  domain that did not take is named, because those are the sites still waiting
+  for a password. This helps panes drawn as a native webview in the desktop
+  app, and only those. A framed pane is a cross-site context, where the browser
+  holds back the ordinary `SameSite=Lax` session cookie — the cookie is in the
+  jar, it is simply never sent — so importing a copy of it changes nothing;
+  only the site itself can lift that, by marking the cookie `SameSite=None;
+  Secure; Partitioned`. Built and unit-tested, never seen on screen, and no
+  cookie has yet been planted in a running app; see "Open items" in the README.
+
 - Controls on every pane, behind a ⋮ button that costs the pane no space. On
   a pane drawn as an iframe the button floats over the page itself and fades
   in when the pointer is over that pane, so a wall at rest shows nothing but
