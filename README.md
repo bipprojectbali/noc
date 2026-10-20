@@ -573,16 +573,16 @@ and the frontend states whether it wants a navigation or only a new rectangle.
 **Not known.** Whether it holds. Nothing in the test suite can see this: the
 behaviour is the shell's, and the shell is not under test.
 
-**One suspicion, from reading rather than running.** The reload path may now
-do nothing on a native pane. Reload — and the reload of every pane that
-follows a cookie import, which the import depends on entirely — asks the shell
-to show the page at the address it is already on, without saying it means to
-replace it. On the shell's new rule that is precisely the case that is left
-alone. The frontend can say "replace it", and that it can is tested; nothing
-in the app appears to say it. If that reading is right, Reload is silent on a
-webview pane and a cookie import plants cookies that no page is ever fetched
-again to use.
+**The cost of the rule, and who pays it.** Not navigating a pane that is
+already where it was asked to be means a reload has to say out loud that it
+means to replace the page, because a reload is exactly a repeat of the address
+a pane is already on. Reload does say it, and so does the reload of every pane
+that follows a cookie import, which that import depends on entirely. The thing
+to know before adding to this: anything new that asks the shell to show a page
+and means "fetch it again" has to say so too, or it becomes a no-op with
+nothing to show that it did nothing. Moving a pane must not say it. That the
+frontend says it where it should is tested; what the shell does with it is not.
 
 **One step.** `bun run tauri:dev`, sign into a site in a native pane, then
 Cmd-R the wall page: the pane must stay on the page it was showing. Then press
-Reload in that pane's menu and watch whether anything is actually fetched.
+Reload in that pane's menu and confirm the page really is fetched again.
