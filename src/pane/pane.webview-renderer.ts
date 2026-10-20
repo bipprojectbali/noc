@@ -350,16 +350,28 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
 }
 
 /**
- * The webview side of the drag seam: hides every webview while any splitter drag
- * is live, and shows them again when the last one ends.
+ * The webview side of the pointer seam: hides every webview while something on
+ * the web layer needs the pointer, and shows them again when the last holder
+ * lets go. Three things hold it — a splitter drag, an open pane menu panel, and
+ * a pane being dragged by its ⋮ — not the splitter alone.
  *
  * Hiding rather than ignoring events, because Tauri v2 offers
- * `setIgnoreCursorEvents` on the window only. Calls nest: two splitters can be
- * dragged at once, and the webviews come back only after both have let go.
+ * `setIgnoreCursorEvents` on the window only. Calls nest, and the count is a
+ * depth rather than a flag: two splitters can be dragged at once, and a menu can
+ * be opened while one of them is live.
  *
- * Nothing is kept here about which webviews were hidden. A pane is hidden exactly
- * when its layout asked for it to be visible, so resuming restores precisely
- * those, at the rect they have now.
+ * That depth is the real trap. Each holder owns exactly one acquire and one
+ * release: the menu panel and the pane drag each take it in a single `useEffect`
+ * keyed on whether they are live and give it back in the cleanup, which covers
+ * every exit path at once, and the splitter pairs it with its drag session
+ * (`endSession`, which the unmount cleanup runs too). Releasing it by hand at a
+ * further call site, or a second time to be sure, unbalances the count — either
+ * webviews that never come back, or webviews that reappear mid-drag and take the
+ * pointer away again.
+ *
+ * Nothing is kept here about which webviews were hidden. A site is shown exactly
+ * when its layout asked for its pane to be visible and it is that pane's active
+ * site, so resuming restores precisely those, at the rect they have now.
  */
 export function createWebviewPointerSuppressor(
   renderer: PaneWebviewRenderer,
