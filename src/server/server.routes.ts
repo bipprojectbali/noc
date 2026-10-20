@@ -43,6 +43,9 @@ export async function handleEmbeddability(request: Request): Promise<Response> {
   return Response.json({
     verdict: result.decision.verdict,
     reason: result.decision.reason,
+    // Advice, never a refusal: the framing verdict above is untouched by it.
+    // Absent on a failed probe, where the client reads it as "unknown".
+    cookies: result.cookies,
     status: result.status,
   });
 }

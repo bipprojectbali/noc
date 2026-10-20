@@ -108,6 +108,7 @@ export function createWallSitesSlice(set: SetWall, get: GetWall): WallSitesSlice
           url,
           verdict: result.verdict,
           reason: result.reason,
+          cookies: result.cookies,
         });
       })
       .catch((error: unknown) => {

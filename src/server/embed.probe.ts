@@ -11,11 +11,26 @@ import {
   classifyEmbeddability,
   type EmbedDecision,
 } from "../embed/embed.classifier.ts";
+import {
+  classifyFrameCookies,
+  type FrameCookieDecision,
+} from "../embed/embed.cookies.ts";
 
 export const PROBE_TIMEOUT_MS = 8000;
 
 export type ProbeResult =
-  | { ok: true; decision: EmbedDecision; status: number }
+  | {
+      ok: true;
+      decision: EmbedDecision;
+      /**
+       * Whether the session this response hands out survives being framed.
+       * Read off the response already in hand — this adds no request, and it
+       * never changes `decision`: a site whose cookies will be dropped is
+       * still a site the wall shows.
+       */
+      cookies: FrameCookieDecision;
+      status: number;
+    }
   | { ok: false; reason: string };
 
 export async function probeEmbeddability(
@@ -46,6 +61,9 @@ export async function probeEmbeddability(
     return {
       ok: true,
       status: response.status,
+      // One header per entry, which is what keeps a comma inside an `Expires`
+      // from being read as the boundary between two cookies.
+      cookies: classifyFrameCookies(response.headers.getSetCookie()),
       decision: classifyEmbeddability(
         {
           xFrameOptions: response.headers.get("x-frame-options") ?? undefined,
