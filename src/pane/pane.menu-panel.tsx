@@ -24,13 +24,54 @@
  * holds nothing but the address being typed.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { PaneId, PaneStrategy, SplitDirection } from "../layout/layout.types.ts";
 import { SessionMenuItem } from "../session/session.menu-item.tsx";
 import { PaneMenuRendererField } from "./pane.menu-renderer-field.tsx";
 import { PaneMenuSites } from "./pane.menu-sites.tsx";
 import type { PaneSitesControl } from "./pane.site-switcher.tsx";
+
+/** Breathing room kept between the panel and the window edge. */
+const PANEL_VIEWPORT_MARGIN_PX = 8;
+
+/**
+ * How far the panel has to slide to stay inside the window.
+ *
+ * The panel hangs from the pane's right edge and grows leftwards, which is
+ * right until the pane itself is at the wall's left edge: then 224px of menu
+ * lands at a negative x, and `html, body { overflow: hidden }` (invariant:
+ * no rubber-band) makes that part not merely off-screen but unreachable —
+ * measured at `x: -148.6` on an 84px pane at x=0. The same happens downwards
+ * for a pane in the bottom row. So the panel is clamped against the *window*;
+ * clamping against the pane is what the CSS already does and what fails.
+ *
+ * Pure, so the arithmetic is provable without a browser, and degenerate rects
+ * ask for no shift at all: happy-dom measures every element as nought, and a
+ * menu that has not been laid out must not be dragged anywhere.
+ */
+export function menuPanelShift(
+  rect: { left: number; right: number; top: number; bottom: number },
+  viewport: { width: number; height: number },
+  margin: number = PANEL_VIEWPORT_MARGIN_PX,
+): { x: number; y: number } {
+  if (rect.right <= rect.left || rect.bottom <= rect.top) return { x: 0, y: 0 };
+  return {
+    x: axisShift(rect.left, rect.right, viewport.width, margin),
+    y: axisShift(rect.top, rect.bottom, viewport.height, margin),
+  };
+}
+
+/**
+ * One axis of the clamp. The margin is where an escaped edge is put back, not a
+ * gap the panel is owed: a panel flush against the window edge is inside it,
+ * and nudging that one would move menus nobody reported.
+ */
+function axisShift(near: number, far: number, size: number, margin: number): number {
+  if (near < 0) return margin - near;
+  if (far > size) return Math.min(0, size - margin - far);
+  return 0;
+}
 
 export type PaneMenuPanelProps = {
   paneId: PaneId;
@@ -62,6 +103,27 @@ export function PaneMenuPanel({
   const [draft, setDraft] = useState(url ?? "");
   /** Whether Enter appends a page instead of repointing the one on screen. */
   const [adding, setAdding] = useState(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Slide the panel back inside the window. Imperative and in a layout effect
+  // for the same reason pane geometry is (`geometry.sync`): it is a correction
+  // to a measurement, so it must land before the frame is shown, and it must
+  // not become React state that re-renders the menu on every open. The reset
+  // first is load-bearing — measuring a panel that is already shifted would
+  // clamp the clamp. Re-run whenever the panel's own height can change, which
+  // is the site list and the error line.
+  useLayoutEffect(() => {
+    const node = panelRef.current;
+    if (node === null) return;
+    node.style.transform = "";
+    const shift = menuPanelShift(node.getBoundingClientRect(), {
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+    if (shift.x !== 0 || shift.y !== 0) {
+      node.style.transform = `translate(${shift.x}px, ${shift.y}px)`;
+    }
+  }, [adding, error, sites.list.length]);
 
   // Follow the pane's url when it changes elsewhere, without fighting typing.
   useEffect(() => {
@@ -76,7 +138,12 @@ export function PaneMenuPanel({
   ];
 
   return (
-    <div className="noc-pane__menu" role="menu" data-testid={`pane-menu-${paneId}`}>
+    <div
+      ref={panelRef}
+      className="noc-pane__menu"
+      role="menu"
+      data-testid={`pane-menu-${paneId}`}
+    >
       <form
         className="noc-pane__menu-form"
         onSubmit={(event) => {
