@@ -66,6 +66,13 @@ export type PaneWebviewRenderer = PaneRenderer & {
   /** The anchor box whose rect the webview is placed over. */
   registerAnchor: (paneId: PaneId, element: HTMLElement | null) => void;
   setUrl: (paneId: PaneId, url: string | null) => void;
+  /**
+   * Navigates the pane to the address it already has. An iframe gets this for
+   * nothing — `probing` drops its `src` and putting it back fetches again — so
+   * only this renderer has to be asked, and it is deliberately not on the
+   * shared `PaneRenderer`.
+   */
+  reopen: (paneId: PaneId) => void;
   /** Re-sends geometry at the visibility the layout last asked for. */
   remeasure: (paneId: PaneId) => void;
 };
@@ -210,6 +217,14 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
         return;
       }
       open(paneId, entry, url);
+    },
+
+    reopen: (paneId) => {
+      const entry = panes.get(paneId);
+      if (entry === undefined || entry.url === null) return;
+      // `show` navigates a webview that already exists, so the page is fetched
+      // again without the view being destroyed — which would lose all it holds.
+      open(paneId, entry, entry.url);
     },
 
     place: (paneId, visible) => {
