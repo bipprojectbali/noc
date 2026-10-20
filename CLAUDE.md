@@ -19,7 +19,7 @@ src/embed/    klasifikasi embeddability, murni, dipakai server & browser
 src/geometry/ rect, registry host, sync slot→pane
 src/layout/   pohon pane: types, node helper, ops murni (tree/remove/move), invariants, serializer, renderer
 src/native/   native.bridge.ts — satu-satunya pintu ke Tauri
-src/pane/     UI pane (tombol ⋮ + menu panel + seret), id, URL, state machine load, store, pane layer, 2 renderer
+src/pane/     UI pane (tombol ⋮ + menu panel + seret + switcher situs), id, URL, state machine load, store (+ slice situs), pane layer, 2 renderer
 src/persist/  port persist, client HTTP, repository SQLite, snapshot, writer
 src/resize/   splitter, aritmetika drag, seam penekan pointer
 src/server/   entrypoint, routes, probe header, ready line, parent watch
@@ -30,7 +30,7 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 
 `src/server/server.entry.ts` satu-satunya entrypoint server (dev, binary, sidecar). `src/app/app.css` satu-satunya stylesheet, semua kelas ber-prefix `noc-`.
 
-**`app.css` 538 baris — lewat batas keras 500 baris aturan global, dan itu keputusan sadar, bukan kelalaian.** Aturan project menang atas aturan global saat bentrok, dan di sini keduanya memang bentrok: satu stylesheet tunggal adalah invariant project (urutan cascade dapat diprediksi, nol pertanyaan "file mana yang menang"), sementara batas 500 baris mengasumsikan file logika yang bisa dipecah per tanggung jawab. Memecah CSS ini berarti memecah cascade-nya. Catatan ukuran yang jujur: 538 baris / 14.658 karakter — batas karakter (20.000) masih jauh, jadi yang terlampaui cuma hitungan baris, dan sebagian besar pertumbuhan terakhir adalah komentar "kenapa" yang justru diwajibkan di sini. Rencana bila benar-benar membengkak: pecah per layer (`app.base.css` / `app.pane.css` / `app.drag.css`) dengan satu file pengimpor berurutan — jangan pecah per komponen, dan jangan tempel `<style>` di komponen.
+**`app.css` 681 baris — lewat batas keras 500 baris aturan global, dan itu keputusan sadar, bukan kelalaian.** Aturan project menang atas aturan global saat bentrok, dan di sini keduanya memang bentrok: satu stylesheet tunggal adalah invariant project (urutan cascade dapat diprediksi, nol pertanyaan "file mana yang menang"), sementara batas 500 baris mengasumsikan file logika yang bisa dipecah per tanggung jawab. Memecah CSS ini berarti memecah cascade-nya. Catatan ukuran yang jujur: 681 baris / 19.139 karakter — **batas karakter (20.000) tinggal ~4%, jadi tambahan besar berikutnya memicu pemecahan, bukan lagi pengecualian**. Rencana saat itu tiba: pecah per layer (`app.base.css` / `app.pane.css` / `app.drag.css`) dengan satu file pengimpor berurutan — jangan pecah per komponen, dan jangan tempel `<style>` di komponen.
 
 ## Invariant yang tidak boleh dilanggar
 
@@ -45,6 +45,8 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 - **Urutan di `syncPaneGeometry` tidak komutatif: tulis transform host dulu, `place?.()` terakhir.** Renderer di luar DOM mengukur anchor yang hidup *di dalam* host itu, jadi dipanggil duluan ia membaca rect sebelum pane pindah. Untuk dua pane berukuran sama yang bertukar tempat, rect basi itu sama persis dengan yang terakhir dikirim, dedupe renderer membuangnya, dan webview-nya tak pernah pindah. Tidak ada yang mengoreksi sesudahnya: sync kedua datang dari `ResizeObserver`, dan tukar-tempat antar pane seukuran tidak mengubah ukuran apa pun.
 - Pane tanpa slot disembunyikan (`visibility: hidden`), bukan diberi rect nol — viewport nol membuat halaman reflow dan kehilangan scroll.
 - `useShallow` di `usePaneIdsInCreationOrder` wajib; tanpa itu seluruh pane layer re-render tiap perubahan store.
+- **Satu pane memegang daftar situs, dan semuanya ter-mount sekaligus** di satu grid cell `.noc-pane__body` (`grid-template-areas: "stack"`), satu `renderer.Content` per situs ber-`key={site.id}`. Yang tidak aktif **disembunyikan**: iframe lewat `noc-pane__frame--hidden` (`visibility`), webview lewat flag `visible` yang sudah ada. Berpindah situs = satu tulisan tree (`setActiveSite`), bukan unmount dan bukan `pane_webview_close` — alasan yang sama dengan pane tanpa slot: rect nol atau unmount berarti reload, scroll hilang, sesi hilang. `releaseSite` hanya untuk situs yang benar-benar dibuang (`removeSite`/`deletePane`).
+- **Konsekuensi: webview dikunci per `siteId`, bukan per pane.** `src/pane/pane.webview-renderer.ts` menyimpan `Map<SiteId, …>` dan label yang dikirim ke Rust adalah site id (argumen `invoke` tetap bernama `paneId` — tak ada perubahan di `src-tauri/`). `place(paneId, visible)` tetap bicara per pane dan menyebar rect yang sama ke tiap situs pane itu dengan `visible && active`. `state.load` juga dikunci per `siteId`: status muat milik halaman, bukan milik pane. Selector `paneLoadState`/`siteLoadState` ada di `pane.store-sites.ts`, bukan di `pane.store.ts`.
 
 **2. Penolakan framing tidak bisa dideteksi dari client.** Iframe terblokir `X-Frame-Options` tetap memicu `load` di Chromium dan dokumennya tak terbaca. Maka:
 

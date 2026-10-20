@@ -14,7 +14,10 @@ button, floating over the top-right corner of an iframe pane and costing it no
 height at all; it opens a dropdown holding the address field, the renderer
 picker, Reload, Split right, Split down and Close. Each pane can be drawn as an
 iframe or as a native webview, and a webview pane keeps a 20px seam for its
-button because an OS-level view cannot be drawn over. The menu also carries
+button because an OS-level view cannot be drawn over. A pane can also hold
+several pages at once: every one of them stays loaded, the switch sits on the
+pane next to ⋮ in the same shape, and the page being left is hidden rather
+than torn down. The menu also carries
 Import cookies, which signs every native pane in at once from a browser
 export. All of it is built and unit-tested; none of it has been seen on
 screen. The desktop shell is real: it runs the server as a sidecar and puts a
@@ -471,4 +474,38 @@ left is the two that were only ever observations.
   `[0.5976, 0.4024]` when another application took the window focus. No cause
   established.
 - After a URL is typed, `currentUrls` reads `null` for both panes while
-  `node.url` is set. Observed, not yet judged.
+  `node.url` is set. Observed, not yet judged. It now reads `null` for every
+  pane by construction: a pane holds a list of sites, and the restore path
+  rebuilds its pages from that list rather than from this column.
+
+### 9. Several pages in one pane: switching is tested, the control is not
+
+**Known.** A pane holds a list of sites and mounts every one of them at once,
+stacked in the body's single grid cell with all but the active one hidden —
+`visibility: hidden` for an iframe, the existing `visible` flag for a native
+webview. Nothing is ever unmounted or closed to switch, and that part is
+checked rather than asserted: the iframe tests compare element identity across
+a switch, and the native test proves `pane_webview_close` is never sent while
+one page is being swapped for another. Load state moved with it: it is the
+page's state now, keyed by site.
+
+The control takes the same shape as ⋮, because the end user asked for exactly
+that after seeing a third shape: pips (or a `3/8` counter past four pages) in
+the same chrome container, floating over an iframe pane and seated in the seam
+of a webview pane. The ⋮ panel lists the pages by name and is the only place
+that can add one, reusing the panel's single field in "add" mode.
+
+**Not known.** Everything about how it looks. The pip row is arithmetic — 8px
+pips, 4px gaps, so `12n − 4` px against a pane that can be ~96px wide, and ⋮
+has to fit beside it — computed against a stylesheet no test loads, in a DOM
+that measures every element as zero. Unverified: that pips and ⋮ both fit on
+the narrowest pane a wall will make, that a pip at 0.28 opacity reads as
+"another page is here" without reading as grime, that the active pip is
+distinguishable at a glance from a monitor's distance, that `12n − 4` is
+honest about the gap CSS actually renders, and whether four is the right place
+to give up on pips. Also unmeasured: what N live pages per pane costs, since a
+wall of four panes holding three sites each is twelve documents, and a hidden
+webview is cheap but a hidden iframe is only throttled.
+
+**One step.** Open the wall, give one pane three sites, and look at the pane
+at its narrowest. Then watch the memory of a wall holding a dozen pages.
