@@ -11,13 +11,16 @@
  * takes no pointer at all and the page loses the button's 24px square and
  * nothing more — a dashboard keeps its own controls in that very corner.
  *
- * Floating is only legal over an iframe. A native child webview is an OS-level
- * view that paints above the whole web layer and ignores CSS clipping, so a
- * button drawn over one would not be there — not dim, not behind, absent. So
- * `floating` is decided per pane from the renderer actually serving it
- * (`pane.frame`), never once for the wall: a webview pane keeps the smallest
- * sibling seam that still holds a clickable button, because over a native view
- * there is no overlay to fall back on and no fourth `invoke` worth adding.
+ * This box floats in both renderers, and over an iframe that is the whole
+ * story. Over a native child webview it is invisible — an OS-level view paints
+ * above the whole web layer and ignores CSS clipping — and what makes it work
+ * anyway is that the pane wears a second one: the shell parks an 88x40 chrome
+ * webview in the same corner carrying this same row, a click there arrives as a
+ * `BroadcastChannel` message (`pane.chrome-channel`), and opening the menu hides
+ * every webview, so this box takes over in the same place. The 20px row a
+ * webview pane used to reserve for a sibling copy is gone with it, which is why
+ * a wall of webview panes no longer reads as stitched together. Nothing here
+ * branches on the renderer any more; the stand-in is the shell's business.
  *
  * The panel is an overlay in both cases, the one thing this codebase otherwise
  * forbids. Its licence is `suspendPanePointerCapture`: while it is open every
@@ -34,12 +37,13 @@
  * then has to swallow.
  *
  * Right-click opens the same menu on surfaces this app owns: an empty pane's
- * message (`pane.frame` wires it) and, on a floating chrome, the button alone,
- * since the box around it is transparent to the pointer. The handler stays on
- * the container because the button's events bubble to it anyway. Over a loaded
- * site there is nothing to hook — a cross-origin iframe never hands its
- * `contextmenu` to the parent, a native webview takes the event at OS level —
- * so a loaded pane is reached through ⋮ and nothing else.
+ * message (`pane.frame` wires it) and the button alone, since the box around it
+ * is transparent to the pointer. The handler stays on the container because the
+ * button's events bubble to it anyway. Over a loaded site there is nothing to
+ * hook — a cross-origin iframe never hands its `contextmenu` to the parent, a
+ * native webview takes the event at OS level — so a loaded pane is reached
+ * through ⋮ and nothing else. The chrome page answers right-click itself and
+ * sends the same request, so a native pane behaves the same way.
  */
 
 import { useEffect, useRef } from "react";
@@ -62,8 +66,10 @@ export type PaneMenuProps = {
   url: string | null;
   /**
    * The pages this pane holds. The switcher that shows them is a sibling of ⋮
-   * inside this one chrome box, so it inherits `floating` rather than deciding
-   * it again — a second shape over a native webview would not be visible at all.
+   * inside this one chrome box, so it floats with it — and on a native pane the
+   * shell's chrome webview draws the same pips, from the list `pane.frame` sends
+   * it. Not a luxury: the pips are the only control a multi-page pane has that
+   * does not blank every webview on the wall to use.
    */
   sites: PaneSitesControl;
   error: string | null;
@@ -74,12 +80,6 @@ export type PaneMenuProps = {
    * not the pane, and a missing control reads as a missing feature.
    */
   nativeHost: boolean;
-  /**
-   * True when this pane's content is an iframe, so the button may float over it
-   * and the pane costs no reserved height. False only for a pane really drawn
-   * as a native webview, which gets the seam instead.
-   */
-  floating: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (raw: string) => void;
@@ -94,7 +94,6 @@ export function PaneMenu({
   url,
   sites,
   open,
-  floating,
   onOpenChange,
   ...panel
 }: PaneMenuProps) {
@@ -127,7 +126,7 @@ export function PaneMenu({
 
   return (
     <div
-      className={`noc-pane__chrome noc-pane__chrome--${floating ? "floating" : "seam"}`}
+      className="noc-pane__chrome"
       ref={rootRef}
       data-testid={`pane-chrome-${paneId}`}
       onContextMenu={(event) => {

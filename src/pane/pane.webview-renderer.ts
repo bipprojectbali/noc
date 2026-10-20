@@ -154,14 +154,24 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
     onError(`Pane site ${siteId} could not ${what}: ${describe(error)}`);
   }
 
+  /**
+   * Whether this site belongs on screen at `rect`.
+   *
+   * Every site of a pane is placed at the same rect — they share one grid cell
+   * — so being the active one is the whole difference between the page on
+   * screen and the pages kept warm behind it. Asked in both directions the
+   * shell can be addressed from, `place` and `show`, because a page that is
+   * opened while hidden must never be shown even for one frame.
+   */
+  function onScreen(entry: PaneEntry, rect: NativeRect): boolean {
+    return entry.visible && entry.active && capturing && hasArea(rect);
+  }
+
   /** Pushes the anchor's current rect, unless nothing has changed. */
   function send(siteId: SiteId, entry: PaneEntry): void {
     if (entry.anchor === null || !entry.opened) return;
     const rect = readRect(entry.anchor);
-    // Every site of a pane is placed at the same rect — they share one grid
-    // cell — so being the active one is the whole difference between the page
-    // on screen and the pages kept warm behind it.
-    const visible = entry.visible && entry.active && capturing && hasArea(rect);
+    const visible = onScreen(entry, rect);
     if (
       entry.sent !== null &&
       entry.sent.visible === visible &&
@@ -195,12 +205,15 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
     if (anchor === null) return;
     const rect = readRect(anchor);
     entry.opened = true;
-    // The shell shows a freshly created webview, so record that as sent and let
-    // the follow-up correct it for a site that is docked, off screen or behind
-    // one of its siblings.
-    entry.sent = { rect, visible: true };
+    // Opened at the visibility it should already have. The shell used to show
+    // whatever it created or navigated and this corrected it afterwards, which
+    // put every background page of a pane on screen for one IPC round-trip —
+    // most visibly on a wall reload, where every site reopens at once. The
+    // follow-up stays for whatever changed while the call was in flight.
+    const visible = onScreen(entry, rect);
+    entry.sent = { rect, visible };
     bridge
-      .show(siteId, url, rect, navigate)
+      .show(siteId, url, rect, navigate, visible)
       .then(() => send(siteId, entry))
       .catch((error: unknown) => {
         entry.sent = null;

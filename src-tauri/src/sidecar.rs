@@ -182,7 +182,11 @@ fn on_stdout(app: &AppHandle, chunk: &str) {
 }
 
 fn open_wall(app: &AppHandle, url: &str) {
-    if app.get_webview_window(WALL_WINDOW_LABEL).is_some() {
+    // Asked of the window and not of `get_webview_window`, which answers None
+    // once the window holds more than its own webview — and by the time a
+    // sidecar re-announces itself the wall is full of pane children, so the
+    // guard would have read "no wall" and tried to build a second one.
+    if app.get_window(WALL_WINDOW_LABEL).is_some() {
         // A reloaded sidecar re-announces itself; the window already points at it.
         return;
     }

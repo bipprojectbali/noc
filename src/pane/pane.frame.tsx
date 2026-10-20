@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { isNativeHost } from "../native/native.bridge.ts";
-import { isPane, type PaneId } from "../layout/layout.types.ts";
+import { isPane, type PaneId, type PaneSite } from "../layout/layout.types.ts";
+import { usePaneChrome } from "./pane.chrome-channel.ts";
 import { PaneCookieNotice } from "./pane.cookie-notice.tsx";
 import { INITIAL_PANE_LOAD_STATE, type PaneLoadState } from "./pane.load-state.ts";
 import { PaneMenu } from "./pane.menu.tsx";
@@ -14,6 +15,8 @@ export type PaneFrameProps = { paneId: PaneId };
 
 /** Stable identity, so the shallow compare below is not defeated by it. */
 const NO_SITES: readonly PaneLoadState[] = [];
+/** Same, for a pane the tree no longer holds. */
+const NO_PANE_SITES: readonly PaneSite[] = [];
 
 /**
  * One pane: its chrome and its content.
@@ -24,12 +27,15 @@ const NO_SITES: readonly PaneLoadState[] = [];
  * unmounting it, or moving it to a different parent in the DOM, reloads the
  * page and discards everything it holds.
  *
- * Whether the chrome may float over that content is decided here, per pane,
- * from the renderer actually serving it — not from the host, and not once for
- * the wall. An iframe is in the DOM and can be drawn over, so its pane spends
- * no height on chrome at all. A native webview paints above the entire web
- * layer and ignores CSS clipping, so a button floating over one would not be
- * there; that pane keeps a seam instead. A wall can hold both at once.
+ * The chrome floats over that content in both renderers, and no pane spends any
+ * height on it. Over an iframe the floating chrome is simply visible. Over a
+ * native webview it is not — the webview is an OS-level view that paints above
+ * the entire web layer — so the shell parks an 88x40 chrome webview in the same
+ * corner, carrying the same ⋮ and the same pips, and its clicks arrive here over
+ * `pane.chrome-channel`. That is what let the 20px seam a webview pane used to
+ * reserve go away. Both ⋮ open this one `menuOpen`, and the moment it is open
+ * every webview hides, so the DOM chrome the native one stands in for is back
+ * in its place.
  *
  * Whether the menu is open lives here rather than in `pane.menu`, because the
  * empty-pane message opens it too: right-click reaches only the surfaces this
@@ -60,6 +66,20 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
   const splitPane = useWallStore((state) => state.splitPane);
   const deletePane = useWallStore((state) => state.deletePane);
   const setPaneStrategy = useWallStore((state) => state.setPaneStrategy);
+
+  // The chrome the shell draws over this pane's webview, in both directions:
+  // its clicks come back here, and it is told which pages the pane holds so its
+  // pips can say which one is showing. It only ever names sites, never panes —
+  // the shell has no idea a pane holds several — so the list below is both the
+  // message and the filter. Before the early return, because a hook cannot be
+  // conditional, which is why the pane is read defensively here.
+  const pane = node !== undefined && isPane(node) ? node : null;
+  usePaneChrome({
+    sites: pane?.sites ?? NO_PANE_SITES,
+    activeId: pane?.activeSiteId ?? null,
+    onOpenMenu: () => setMenuOpen(true),
+    onActivate: (siteId) => activateSite(paneId, siteId),
+  });
 
   if (node === undefined || !isPane(node)) {
     return <div className="noc-error">Pane {paneId} is not in the layout.</div>;
@@ -95,7 +115,6 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
         error={error}
         strategy={node.strategy}
         nativeHost={nativeHost}
-        floating={renderer.kind === "iframe"}
         open={menuOpen}
         onOpenChange={setMenuOpen}
         onSubmit={(raw) => {

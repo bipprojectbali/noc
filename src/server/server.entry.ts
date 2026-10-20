@@ -18,6 +18,7 @@ import {
   handleCookieDemoRead,
   handleCookieDemoSet,
 } from "./cookie.demo.ts";
+import { PANE_CHROME_PATH, handlePaneChrome } from "./server.chrome-page.ts";
 import { WALL_SHELL_PATH, createHostDispatch } from "./server.host-dispatch.ts";
 import { watchParentProcess } from "./server.parent-watch.ts";
 import { readyLine } from "./server.ready.ts";
@@ -71,6 +72,9 @@ try {
         createEmbeddabilityHandler({ registry: proxySiteRegistry }),
       ),
       [SELF_TEST_PATH]: wallOnly(handleSelfTest),
+      // Before the catch-all below, which is the wall page itself: this one is
+      // loaded by the shell into a 40px child webview, not by a browser.
+      [PANE_CHROME_PATH]: wallOnly(handlePaneChrome),
       // Framable on purpose: the demo only says anything when the wall frames
       // it from the other loopback host. See `cookie.demo-page.ts`. `wallOnly`
       // does not change that — it only keeps these paths off a proxied site,

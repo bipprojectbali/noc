@@ -112,15 +112,17 @@ describe("⋮ is the only permanent chrome, and it opens the rest", () => {
     );
   });
 
-  test("the iframe pane reserves no height for its chrome", () => {
+  test("no pane reserves any height for its chrome", () => {
     render(<AppShell />);
 
     // happy-dom measures nothing, so this asserts the mechanism rather than the
     // result: an absolutely positioned chrome is the only kind that takes no
     // room from the body. Whether it is really flush is a question for a
-    // running browser.
-    expect(screen.getByTestId(`pane-chrome-${ROOT}`).className).toContain(
-      "noc-pane__chrome--floating",
+    // running browser. One class and no renderer branch is the point — the
+    // 20px row a webview pane used to reserve is what made the wall look
+    // stitched together, and the shell now stands in for the button instead.
+    expect(screen.getByTestId(`pane-chrome-${ROOT}`).className).toBe(
+      "noc-pane__chrome",
     );
   });
 
@@ -146,7 +148,7 @@ describe("⋮ is the only permanent chrome, and it opens the rest", () => {
   test("right-click on ⋮ itself opens it too", () => {
     render(<AppShell />);
 
-    // On a floating chrome the padding around the button is transparent to the
+    // The padding around the button is transparent to the
     // pointer, so the button is the only part of the chrome a right-click can
     // land on. The handler stays on the container and the event bubbles to it;
     // this is what says the ⋮ still answers once its box stops taking input.

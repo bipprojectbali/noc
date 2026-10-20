@@ -147,6 +147,14 @@
   still wins. Reasoned and type-checked only; nobody has yet run a built
   `.app` and watched the ribbon stay away.
 
+- In the desktop app, the pages a pane keeps warm behind the one you are
+  looking at no longer flash over it. Opening a page always put it on screen
+  first and took it away again a moment later, so every page a pane holds
+  flickered across the pane each time the wall page reloaded or a pane was
+  reloaded — one flash per page, on a wall where panes hold several. A page
+  that belongs behind another is now opened behind it. Unit-tested; nobody has
+  watched a wall reload with this in place.
+
 - Reloading the wall no longer throws away where a pane had got to. In the
   desktop app, every pane was sent back to the address it was stored with the
   moment the wall page reloaded, so a pane you had just signed into came back
