@@ -220,6 +220,9 @@ body.noc-resizing .noc-pane__frame {
   cursor: pointer;
   opacity: 0.14;
   transition: opacity 120ms ease;
+  /* It is the drag handle too; without this a touch press on it scrolls the
+     page instead of carrying the pane. */
+  touch-action: none;
 }
 
 .noc-pane:hover .noc-pane__menu-button,
@@ -419,6 +422,83 @@ body.noc-resizing .noc-pane__menu {
    takes mouse input at the OS level, outside the reach of any CSS. */
 body.noc-no-pane-cursor .noc-pane-host {
   pointer-events: none;
+}
+
+/* Drag feedback, and the one overlay that is always safe: it exists only while
+   a drag holds the pointer suppressor, so every native webview is hidden and
+   there is nothing left that paints above the web layer. `pointer-events: none`
+   is load-bearing — the drop target is found with `elementFromPoint`, and an
+   overlay that answered would make every drop land on the pane it started from.
+   z-index 4 clears the floating ⋮ (2) and its panel (3). */
+.noc-pane-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+/* Every pane is outlined for the duration, not just the two taking part. A
+   webview pane is blank while the drag runs and an iframe pane is not, so on a
+   mixed wall the outline and the label are what say the empty boxes are still
+   panes rather than something that just broke. */
+.noc-pane-drop--idle {
+  box-shadow: inset 0 0 0 1px rgba(215, 220, 229, 0.18);
+}
+
+.noc-pane-drop--source {
+  background: rgba(15, 17, 21, 0.55);
+  box-shadow: inset 0 0 0 2px var(--noc-muted);
+}
+
+.noc-pane-drop--target {
+  box-shadow: inset 0 0 0 2px #6ea8fe;
+}
+
+/* The landing area, drawn where the pane will actually end up: half the target
+   along one axis for an edge, the whole of it inset for a swap. Guessing wrong
+   about where a pane lands is the only real mistake this gesture can make. */
+.noc-pane-drop__zone {
+  position: absolute;
+  background: rgba(110, 168, 254, 0.28);
+  box-shadow: inset 0 0 0 1px #6ea8fe;
+}
+
+.noc-pane-drop__zone--left {
+  inset: 0 50% 0 0;
+}
+
+.noc-pane-drop__zone--right {
+  inset: 0 0 0 50%;
+}
+
+.noc-pane-drop__zone--top {
+  inset: 0 0 50% 0;
+}
+
+.noc-pane-drop__zone--bottom {
+  inset: 50% 0 0 0;
+}
+
+.noc-pane-drop__zone--center {
+  inset: 12px;
+  border-radius: 8px;
+}
+
+/* Names the pane while its content may be a blank box. Its own backdrop for
+   the same reason the ⋮ has one: what is behind it is somebody else's site. */
+.noc-pane-drop__label {
+  position: relative;
+  max-width: 90%;
+  padding: 4px 8px;
+  overflow: hidden;
+  color: #f4f6fa;
+  background: rgba(13, 15, 20, 0.82);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .noc-pane__status {

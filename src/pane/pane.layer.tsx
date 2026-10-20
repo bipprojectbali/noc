@@ -12,6 +12,7 @@ import { useShallow } from "zustand/shallow";
 
 import { geometryRegistry } from "../geometry/geometry.store.ts";
 import { isPane, type PaneId } from "../layout/layout.types.ts";
+import { PaneDropOverlay } from "./pane.drop-overlay.tsx";
 import { PaneFrame } from "./pane.frame.tsx";
 import { useWallStore } from "./pane.store.ts";
 
@@ -31,6 +32,10 @@ function PaneHost({ paneId }: { paneId: PaneId }) {
       data-testid={`pane-host-${paneId}`}
     >
       <PaneFrame paneId={paneId} />
+      {/* A sibling of the frame, not a child: it has to cover the pane's own
+          chrome, and subscribing here instead of inside `PaneFrame` keeps a
+          drag from re-rendering the element the page lives in. */}
+      <PaneDropOverlay paneId={paneId} />
     </div>
   );
 }
