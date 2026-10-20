@@ -120,7 +120,7 @@ describe("reopen navigates a webview that is already there", () => {
   });
 });
 
-type InvokeCall = { cmd: string; paneId: unknown };
+type InvokeCall = { cmd: string; paneId: unknown; navigate: unknown };
 
 let invokeCalls: InvokeCall[] = [];
 let probeCalls: string[] = [];
@@ -128,8 +128,8 @@ const realFetch = globalThis.fetch;
 
 function enterNativeHost(): void {
   (globalThis.window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
-    invoke: (cmd: string, args: { paneId?: unknown }) => {
-      invokeCalls.push({ cmd, paneId: args?.paneId });
+    invoke: (cmd: string, args: { paneId?: unknown; navigate?: unknown }) => {
+      invokeCalls.push({ cmd, paneId: args?.paneId, navigate: args?.navigate });
       return Promise.resolve();
     },
   };
@@ -153,6 +153,17 @@ function commandsFor(paneId: string): string[] {
 
 function countOf(paneId: string, cmd: string): number {
   return commandsFor(paneId).filter((seen) => seen === cmd).length;
+}
+
+/** The `navigate` flag of every `pane_webview_show` aimed at this pane's sites. */
+function navigateFlagsFor(paneId: string): unknown[] {
+  const sites = siteIdsOf(paneId);
+  return invokeCalls.flatMap((call) =>
+    call.cmd === "pane_webview_show" &&
+    sites.some((siteId) => call.paneId === siteId)
+      ? [call.navigate]
+      : [],
+  );
 }
 
 async function submit(paneId: string, raw: string): Promise<void> {
@@ -199,6 +210,37 @@ describe("reloadPane reaches whichever renderer the pane got", () => {
       expect(countOf(PANE, "pane_webview_show")).toBe(2);
     }, WAIT);
     expect(commandsFor(PANE)).not.toContain("pane_webview_close");
+  });
+
+  /**
+   * The flag is the whole reload, not a detail of it. The shell remembers the
+   * address each pane was last sent to and skips a `show` that would repeat it,
+   * because this page forgets its panes on every reload and would otherwise
+   * snap them all back to the stored url. That dedupe swallows the reload button
+   * too unless the caller says it means to replace the page — so a mount must
+   * ask for no navigation and a reload must ask for one.
+   */
+  test("a reload asks the shell to navigate, a mount does not", async () => {
+    const PANE = "r4";
+    enterNativeHost();
+    resetWallStore(PANE);
+    render(<PaneFrame paneId={PANE} />);
+    await submit(PANE, "https://example.com");
+    await waitFor(() => {
+      expect(countOf(PANE, "pane_webview_show")).toBe(1);
+    }, WAIT);
+    // Opening the page is not replacing it: the webview may already be there,
+    // left over from before this page reloaded, and further along than the url.
+    expect(navigateFlagsFor(PANE)).toEqual([false]);
+
+    await act(async () => {
+      useWallStore.getState().reloadPane(PANE);
+    });
+
+    await waitFor(() => {
+      expect(countOf(PANE, "pane_webview_show")).toBe(2);
+    }, WAIT);
+    expect(navigateFlagsFor(PANE)).toEqual([false, true]);
   });
 
   test("an empty pane has nothing to reload", async () => {

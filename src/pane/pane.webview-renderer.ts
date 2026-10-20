@@ -175,8 +175,22 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
     });
   }
 
-  /** Creates the webview, or navigates it if the site already had one. */
-  function open(siteId: SiteId, entry: PaneEntry, url: string): void {
+  /**
+   * Creates the webview, or navigates it if the site already had one.
+   *
+   * `navigate` is what the shell needs to tell a reload apart from an open. It
+   * skips a `show` that would send a webview to the address it is already on,
+   * because this page forgets which sites it has opened every time it reloads
+   * and would otherwise snap every pane back to the stored url, discarding
+   * wherever the user had browsed to. Only an explicit reload overrides that,
+   * so the default is to open without replacing anything.
+   */
+  function open(
+    siteId: SiteId,
+    entry: PaneEntry,
+    url: string,
+    navigate = false,
+  ): void {
     const anchor = entry.anchor;
     if (anchor === null) return;
     const rect = readRect(anchor);
@@ -186,7 +200,7 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
     // one of its siblings.
     entry.sent = { rect, visible: true };
     bridge
-      .show(siteId, url, rect)
+      .show(siteId, url, rect, navigate)
       .then(() => send(siteId, entry))
       .catch((error: unknown) => {
         entry.sent = null;
@@ -281,7 +295,9 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
       if (entry === undefined || entry.url === null) return;
       // `show` navigates a webview that already exists, so the page is fetched
       // again without the view being destroyed — which would lose all it holds.
-      open(siteId, entry, entry.url);
+      // Asking for it explicitly is the point: the shell skips a repeat of an
+      // address a webview is already on, and a reload is exactly that repeat.
+      open(siteId, entry, entry.url, true);
     },
 
     place: (paneId, visible) => {
