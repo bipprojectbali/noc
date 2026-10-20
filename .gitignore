@@ -18,6 +18,9 @@ service-account.json
 # Local runtime state (layout, saved views)
 .noc-data/
 
+# Throwaway worktrees used by background agents
+.claude/
+
 .DS_Store
 
 # Native shell build output
