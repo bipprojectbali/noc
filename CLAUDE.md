@@ -1,6 +1,6 @@
 # CLAUDE.md — NOC wall
 
-Dinding pane berpetak; tiap pane memegang satu atau beberapa situs (semuanya ter-mount, satu aktif). Bun (server + bundler + test runner) · React 19 · react-router 8 **library mode** · zustand 5 · Tauri 2 (`unstable`, multiwebview) · SQLite via `bun:sqlite`. v0.2.0.
+Dinding pane berpetak; tiap pane memegang satu atau beberapa situs (semuanya ter-mount, satu aktif). Bun (server + bundler + test runner) · React 19 · react-router 8 **library mode** · zustand 5 · Tauri 2 (`unstable`, multiwebview) · SQLite via `bun:sqlite`. v0.3.0.
 README = produk & milestone untuk manusia. File ini = perintah, invariant, jebakan. Jangan saling duplikasi.
 
 ## Perintah
