@@ -157,6 +157,14 @@ body.noc-resizing .noc-pane__frame {
   pointer-events: auto;
 }
 
+/* Every host carries a transform, so every host is its own stacking context and
+   `z-index` inside one cannot reach past it: a menu overflowing its pane was
+   painted under — and hit-tested behind — any pane created later, which ate the
+   right ~50px of every row. The pane holding the open menu is lifted whole. */
+.noc-pane-host:has(.noc-pane__menu) {
+  z-index: 1;
+}
+
 /* `relative` so the menu panel can be positioned against the pane. The panel is
    the single exception to "chrome is never an overlay", and it pays for it by
    hiding every native webview for as long as it is open — see `pane.menu`. */
