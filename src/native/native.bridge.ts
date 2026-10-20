@@ -9,6 +9,10 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type { PaneId } from "../layout/layout.types.ts";
+// The row shape `cookie_import` deserialises is the parser's output type, not a
+// second declaration of it: one definition means the two sides cannot drift
+// apart silently. `session.types` imports nothing, so this cannot cycle.
+import type { SessionCookie } from "../session/session.types.ts";
 
 /**
  * Logical pixels relative to the window's content area, which is the same
@@ -29,25 +33,6 @@ export type NativePaneBridge = {
   place: (paneId: PaneId, rect: NativeRect, visible: boolean) => Promise<void>;
   /** Destroys it. Only a deleted pane should reach this. */
   close: (paneId: PaneId) => Promise<void>;
-};
-
-/**
- * One row of a browser cookie export, in the shape `cookie_import` in
- * `src-tauri/src/cookie_import.rs` deserialises.
- *
- * This duplicates `SessionCookie` in `src/session/session.types.ts`, which is
- * being written in parallel. The two must be reconciled into one type at
- * integration; the shape is identical by agreement, not by import.
- */
-export type NativeCookie = {
-  name: string;
-  value: string;
-  domain: string;
-  path: string;
-  secure: boolean;
-  httpOnly: boolean;
-  /** Unix seconds, or `null` for a session cookie. */
-  expires: number | null;
 };
 
 /**
@@ -77,7 +62,7 @@ export type NativeCookieBridge = {
    * store to write to, which is an answer, not a failure.
    */
   importCookies: (
-    cookies: readonly NativeCookie[],
+    cookies: readonly SessionCookie[],
   ) => Promise<CookieImportResult>;
 };
 
