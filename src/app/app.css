@@ -288,6 +288,16 @@ body.noc-resizing .noc-pane__frame {
   background: rgba(255, 255, 255, 0.07);
 }
 
+/* A row the host cannot offer: dimmed to the muted colour and inert, kept in
+   place rather than removed, so the menu reads the same everywhere and the
+   note under it can say why. Same treatment the renderer picker gives its
+   webview option in a browser. */
+.noc-pane__menu-item:disabled {
+  color: var(--noc-muted);
+  background: none;
+  cursor: default;
+}
+
 .noc-pane__menu-item--danger {
   color: var(--noc-danger);
 }
@@ -319,10 +329,23 @@ body.noc-resizing .noc-pane__frame {
   color: var(--noc-muted);
 }
 
-.noc-pane__menu-error {
+/* Prose inside a menu of single-line rows, so it is the one thing here allowed
+   to wrap: the panel's 224px is set by the longest renderer label and must not
+   grow for a sentence. `break-word` because a failed import names domains, and
+   one long host would otherwise push the panel wider than the narrowest pane. */
+.noc-pane__menu-error,
+.noc-pane__menu-note {
   display: block;
   padding: 4px;
+  overflow-wrap: break-word;
+}
+
+.noc-pane__menu-error {
   color: var(--noc-danger);
+}
+
+.noc-pane__menu-note {
+  color: var(--noc-muted);
 }
 
 /* The suppressor's iframe arm sets `user-select: none` on <body>, and the menu

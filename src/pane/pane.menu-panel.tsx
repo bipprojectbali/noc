@@ -11,10 +11,13 @@
  *
  * Three groups: what the pane shows, what to do to it, and the one that
  * destroys it. Address and renderer sit together because they answer the same
- * question, so they share one geometry. The address is first because giving a
- * pane a URL is the one thing this menu exists for; Enter submits it, and a Go
- * button bought nothing a form already does. Each renderer label names its
- * cost, because switching rebuilds the content and the site reloads.
+ * question, so they share one geometry. Cookie import sits with the actions
+ * even though it is wall-wide rather than per pane: there is no wall-level
+ * menu to put it in, and every pane's ⋮ is the same door onto it. The address
+ * is first because giving a pane a URL is the one thing this menu exists for;
+ * Enter submits it, and a Go button bought nothing a form already does. Each
+ * renderer label names its cost, because switching rebuilds the content and
+ * the site reloads.
  *
  * Split from `pane.menu` along the line that matters rather than to make two
  * files: that one owns the panel's lifetime, this one owns its contents and
@@ -24,6 +27,7 @@
 import { useEffect, useState } from "react";
 
 import type { PaneId, PaneStrategy, SplitDirection } from "../layout/layout.types.ts";
+import { SessionMenuItem } from "../session/session.menu-item.tsx";
 import { PaneMenuRendererField } from "./pane.menu-renderer-field.tsx";
 
 export type PaneMenuPanelProps = {
@@ -110,6 +114,8 @@ export function PaneMenuPanel({
           {item.label}
         </button>
       ))}
+
+      <SessionMenuItem paneId={paneId} nativeHost={nativeHost} />
 
       <div className="noc-pane__menu-rule" />
 
