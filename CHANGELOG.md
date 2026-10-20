@@ -4,6 +4,25 @@
 
 ### Added
 
+- Rearrange the wall by dragging a pane. The handle is the same ⋮ the menu
+  hangs from: press it and let go and you get the menu as before, press it and
+  move and you are carrying the pane. Drop it against the left, right, top or
+  bottom of another pane to land beside it there; drop it on that pane's
+  middle — the central 40% of each axis — and the two trade places instead.
+  Four pixels of travel is the whole difference between the two gestures, so
+  nothing changes for anyone who only ever clicks. The ⋮ is the only handle
+  there can be: a press anywhere on a pane's page is heard by the site, not by
+  this app. Nothing reloads, under either renderer, because a move rewires the
+  layout and never gives a pane a new identity. Escape, releasing outside the
+  window, or losing focus mid-drag all put the pane back. While a drag runs,
+  every pane drawn as a native webview goes blank — the same bargain the
+  splitter and the menu already make — so for the length of the gesture every
+  pane is outlined and named by its host: without that, a mixed wall would
+  read as half of it having broken rather than as panes waiting to be dropped
+  on. The pane being carried is dimmed, and the area the pane will actually
+  occupy is shaded over the pane about to receive it. Built and unit-tested,
+  never seen on screen; see "Open items" in the README.
+
 - Import the cookies from the browser you are already signed into, so a pane
   stops asking you to log in again. Export them with whatever extension you
   already have — a Netscape `cookies.txt` or a JSON array — then pick the file
@@ -63,6 +82,27 @@
   re-places them.
 
 ### Fixed
+
+- The wheel now stays inside the pane it is used over. A pane whose page fits
+  on screen has nothing left to scroll, and the wheel then chained out of the
+  pane to the wall behind it, where macOS answered it with an elastic bounce
+  of the whole grid. From the operator's seat that read as the pane refusing
+  to scroll while the page slid instead. The wall is a fixed set of viewports
+  and was never taller than the window — that was measured, not assumed — so
+  the fix is to refuse the chaining rather than to remove a scrollbar that was
+  never there. Panes drawn as a native webview were never affected: the system
+  takes the wheel before the wall sees it. Nothing has watched the bounce stop,
+  though; see "Open items" in the README.
+
+- A native pane now goes where the layout sent it. The shell was told a pane's
+  new position before the pane had actually been moved, so it measured the
+  place the pane was leaving: one frame late at best, and for two panes of the
+  same size trading places, late enough to be wrong forever — the stale
+  position matched the one already on file, the shell treated the instruction
+  as redundant, and one webview never moved while the other sat at its
+  neighbour's old place. Nothing corrected it afterwards, because the second
+  pass that normally would is triggered by a size change and a swap of equals
+  changes no size.
 
 - A pane in the desktop app no longer covers its own chrome. Every native pane
   sat one title bar too high, hiding the controls above it and leaving a band

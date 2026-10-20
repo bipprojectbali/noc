@@ -7,15 +7,18 @@ Router (library mode) and Zustand.
 
 The wall renders a tree of panes with a draggable splitter between every pair.
 Splits and deletion are wired through the store and proven not to disturb a
-pane's iframe. A pane's whole chrome is now one ⋮ button, floating over the
-top-right corner of an iframe pane and costing it no height at all; it opens a
-dropdown holding the address field, the renderer picker, Reload, Split right,
-Split down and Close. Each pane can be drawn as an iframe or as a native
-webview, and a webview pane keeps a 20px seam for its button because an
-OS-level view cannot be drawn over. The menu also carries Import cookies, which
-signs every native pane in at once from a browser export. All of it is built
-and unit-tested; none of it has been seen on screen. The desktop shell is real:
-it runs the server as a sidecar and puts a native webview in each pane.
+pane's iframe. Panes can also be rearranged after the fact: drag one by its ⋮
+onto another pane's edge to land beside it, or onto its middle to trade the two
+places, with no page reloading either way. A pane's whole chrome is now one ⋮
+button, floating over the top-right corner of an iframe pane and costing it no
+height at all; it opens a dropdown holding the address field, the renderer
+picker, Reload, Split right, Split down and Close. Each pane can be drawn as an
+iframe or as a native webview, and a webview pane keeps a 20px seam for its
+button because an OS-level view cannot be drawn over. The menu also carries
+Import cookies, which signs every native pane in at once from a browser
+export. All of it is built and unit-tested; none of it has been seen on
+screen. The desktop shell is real: it runs the server as a sidecar and puts a
+native webview in each pane.
 
 | Milestone | State |
 | --- | --- |
@@ -23,7 +26,7 @@ it runs the server as a sidecar and puts a native webview in each pane.
 | M2 — pure tree engine: split, delete, resize, dock, invariants | done |
 | M3 — tree rendering with a stable flat pane layer | done |
 | M4 — splitter and drag resize | done for iframe panes, see below |
-| M5 — per-pane controls: one floating ⋮, one dropdown | built and unit-tested; not yet seen on screen, see below. Minimise and the dock strip were dropped from the UI |
+| M5 — per-pane controls: one floating ⋮, one dropdown | built and unit-tested; not yet seen on screen, see below. ⋮ is also the handle that drags a pane elsewhere on the wall, same status. Minimise and the dock strip were dropped from the UI |
 | M6 — freeze and suspend policy | not started; hiding a webview already suspends it for free, see below |
 | M7 — persistence and saved views | layout restores on reload and saves on change; saved views not started |
 | M8 — native webview renderer (Tauri) | panes render, respond and navigate, and now sit where they belong; the switch that picks the renderer is built but not yet seen on screen, see below |
@@ -140,7 +143,7 @@ src/
   embed/     embeddability classification (pure)
   geometry/  rect maths, host registry, slot-to-pane sync
   layout/    pane tree: types, pure ops, invariants, serializer, renderer
-  pane/      pane UI (⋮ button and menu), URL handling, load state machine, store, pane layer
+  pane/      pane UI (⋮ button, menu and drag-to-rearrange), URL handling, load state machine, store, pane layer
   resize/    splitter, drag arithmetic, pane pointer suppression seam
   server/    entrypoint, routes, header probe
   session/   cookie import: export parser (pure), its own store, menu item
@@ -291,7 +294,7 @@ position. No fourth `invoke` and no native menu were added — the cheap path
 first, revisited only if the blanking proves annoying.
 
 **Not known.** Everything visual. The suite runs under happy-dom, which measures
-every element at zero width and height, so none of its 272 passing tests
+every element at zero width and height, so none of its 329 passing tests
 says that an iframe pane's body really runs edge to edge, that the ⋮ is legible
 over an actual bright website or lost over a dark one, that 14% opacity is
 "nearly invisible" rather than "invisible", that the 224px dropdown fits inside
@@ -373,7 +376,63 @@ a deliberately broken file produces the worded error instead of silence. Then
 put the same site in an iframe pane and confirm it still asks for a login —
 that is the expected result, not a regression.
 
-### 4. A long hide, and `<video>` and WebSocket under one, are not measured
+### 4. Dragging a pane has never been on screen
+
+**Known.** The gesture shares the ⋮ with the menu, because there is no other
+surface to share it with: a press on a pane's page is heard by the site and
+never by this app, under either renderer. Four pixels of travel separates the
+two gestures. Dropping against an edge of another pane puts the dragged pane on
+that side of it; dropping in the middle — the central 40% of each axis, the
+smaller share on purpose, since a swap moves two panes and is the expensive
+mistake — trades their places. The tree operations behind both are pure and
+never mint a pane id, which is what keeps the pages from reloading, and the
+wall commits the whole move in one write so no pane is ever briefly slotless.
+Every way out is covered: Escape, a cancelled pointer, the window losing focus,
+and the dragged pane being deleted while its own button is still held.
+
+**Not known.** What it is like to use. While the drag runs it holds the same
+suppressor the splitter and the menu hold, so every native webview on the wall
+is blank for the duration — which is exactly what makes drawing the drop
+feedback possible, and also what might make the gesture unpleasant. Each pane
+therefore gets a thin ring and its host name, and nothing has confirmed that
+the ring is visible over a bright dashboard and over a dark one alike, that the
+name fits a narrow pane rather than being clipped to an ellipsis that says
+nothing, or that the shaded landing area reads as "the pane will go here". Nor
+whether four pixels is the right threshold on a trackpad, where a press is far
+less steady than on a mouse — too low and every click on ⋮ risks becoming a
+tiny drag, which would make the menu feel broken.
+
+**Next step.** `bun run tauri:dev` on at least four panes, two of them native
+webviews and two of them bright pages. Drag one pane onto each of the four
+edges of another and confirm it lands on the side the shading promised; drag
+one onto a middle and confirm the two swap without either page reloading.
+Click ⋮ twenty times without meaning to drag and confirm the menu opens every
+time. Then judge the blanking the way entry 1 asks it to be judged, and count
+how many of the blank panes you can still name from the ring and label alone.
+
+### 5. The wall no longer bounces, but nothing has watched it stop
+
+**Known.** A wheel an iframe pane cannot absorb chains out to the wall
+document, and macOS answers it there with an elastic bounce of the whole grid.
+The wall document is a fixed set of viewports and was never taller than the
+window — measured, not assumed — so the fix refuses the chaining
+(`overscroll-behavior: none`) and removes any scroll it could find
+(`overflow: hidden`) rather than removing an overflow that was never there.
+Both properties matter: panes are placed in viewport coordinates and nothing
+listens for scroll, so a document that moved at all would drag every pane off
+its slot. Native webview panes never chained here in the first place.
+
+**Not known.** Whether it is gone. This is a removal of the cause by
+construction, not an observation of an effect disappearing: headless Chrome
+does not rubber-band, so no test could have watched the bounce and no test can
+watch it stop.
+
+**Next step.** `bun run dev` in Safari or Chrome on macOS with one pane showing
+a page shorter than the pane, and spin the wheel hard over it. The wall must
+not move. Then a page taller than the pane, to confirm that the pane itself
+still scrolls and only the wall is locked.
+
+### 6. A long hide, and `<video>` and WebSocket under one, are not measured
 
 **Known.** What the source says, above: hidden means not visible, which suspends
 `requestAnimationFrame` and aligns timers to about 1 Hz.
@@ -385,7 +444,7 @@ playback and WebSocket traffic are treated specially.
 that each write a timestamp, hidden for five minutes and then shown. The gaps in
 the two logs answer it.
 
-### 5. `createdAt` is monotonic only against the values it issued itself
+### 7. `createdAt` is monotonic only against the values it issued itself
 
 **Known.** `nextCreatedAt()` carries its own `lastCreatedAt` and never reads the
 tree. `restoreLayout` puts a stored tree straight into the store, so a layout
@@ -401,7 +460,7 @@ observed.
 tree, about two lines in `src/pane/pane.store.ts`. Left undone on purpose: the
 case is unproven.
 
-### 6. Loose ends found while verifying, still open
+### 8. Loose ends found while verifying, still open
 
 The three code-level ones from this list are now closed: `sidecar_env()` passes
 `NOC_DB_FILE` through, the dead `{kind:"error"}` variant is gone from
