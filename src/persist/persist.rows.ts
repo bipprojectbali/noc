@@ -6,11 +6,15 @@
  * same version migration and the same structural checks as any other persisted
  * layout instead of being trusted because it came from our own database.
  *
- * `panes.home_url` is legacy: addresses live in `pane_sites` since schema 2,
- * its only remaining reader is that step's one-shot backfill, and writes here
- * leave it null. Kept rather than dropped because dropping a column in SQLite
- * means rebuilding the table. `panes.current_url` is *not* legacy — it holds
- * `WallSnapshot.currentUrls`, which is keyed per pane, not per site.
+ * Two pane columns are legacy, and both are left out of the INSERT so nothing
+ * here writes them again. Neither is dropped, because dropping a column in
+ * SQLite means rebuilding the table:
+ *
+ * - `home_url`: addresses live in `pane_sites` since schema 2, and its only
+ *   remaining reader is that step's one-shot backfill.
+ * - `current_url`: meant for a page a pane had navigated to by itself, which
+ *   never differed from the site's own url — we only ever learn the `src` we
+ *   set. Rows written before this still hold a value; nobody reads it.
  */
 
 import type { Database } from "bun:sqlite";
@@ -45,7 +49,6 @@ type LayoutRow = { root_id: string; layout_version: number };
 type PaneRow = {
   id: string;
   parent_id: string | null;
-  current_url: string | null;
   url_bar_visible: number;
   strategy: string;
   created_at: number;
@@ -103,12 +106,11 @@ export function readLayout(db: Database, layoutId: string): StoredLayout | null 
   if (header === null) return null;
 
   const nodes: Record<NodeId, PaneNode | SplitNode> = {};
-  const currentUrls: Record<PaneId, string | null> = {};
   const sitesByPane = readSites(db, layoutId);
 
   for (const row of db
     .query<PaneRow, [string]>(
-      `SELECT id, parent_id, current_url, url_bar_visible, strategy, created_at
+      `SELECT id, parent_id, url_bar_visible, strategy, created_at
        FROM panes WHERE layout_id = ? ORDER BY created_at`,
     )
     .all(layoutId)) {
@@ -127,7 +129,6 @@ export function readLayout(db: Database, layoutId: string): StoredLayout | null 
       strategy: row.strategy as PaneStrategy,
       createdAt: row.created_at,
     };
-    currentUrls[row.id] = row.current_url;
   }
 
   for (const row of db
@@ -158,7 +159,6 @@ export function readLayout(db: Database, layoutId: string): StoredLayout | null 
   // with the current version, which is the shape `StoredLayout` carries.
   return {
     layout: serializeLayout(parseLayout({ version: header.layout_version, tree })),
-    currentUrls,
   };
 }
 
@@ -186,12 +186,13 @@ export function writeLayout(
   db.run("DELETE FROM pane_sites WHERE layout_id = ?", [layoutId]);
   db.run("DELETE FROM splits WHERE layout_id = ?", [layoutId]);
 
-  // `home_url` is left out on purpose: writing the active site into the legacy
-  // column would invite a future reader to treat it as the truth.
+  // `home_url` and `current_url` are both left out on purpose: writing an
+  // address into either legacy column would invite a future reader to treat it
+  // as the truth, and `pane_sites` is the truth.
   const insertPane = db.query(
-    `INSERT INTO panes (id, layout_id, parent_id, current_url,
+    `INSERT INTO panes (id, layout_id, parent_id,
                         url_bar_visible, strategy, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?)`,
   );
   const insertSite = db.query(
     `INSERT INTO pane_sites (layout_id, pane_id, site_id, position, url,
@@ -210,7 +211,6 @@ export function writeLayout(
         node.id,
         layoutId,
         node.parentId,
-        snapshot.currentUrls[node.id] ?? null,
         node.urlBarVisible ? 1 : 0,
         node.strategy,
         node.createdAt,

@@ -473,10 +473,14 @@ left is the two that were only ever observations.
 - Seen once: the layout's `sizes` moved on their own from `[0.5, 0.5]` to
   `[0.5976, 0.4024]` when another application took the window focus. No cause
   established.
-- After a URL is typed, `currentUrls` reads `null` for both panes while
-  `node.url` is set. Observed, not yet judged. It now reads `null` for every
-  pane by construction: a pane holds a list of sites, and the restore path
-  rebuilds its pages from that list rather than from this column.
+- ~~After a URL is typed, `currentUrls` reads `null` for both panes while
+  `node.url` is set.~~ Closed, by deletion. The observation was right and the
+  field was never able to hold anything else: load state only ever carries a
+  url we set ourselves, because a cross-origin frame never reports where it
+  navigated. `currentUrls` is gone from `WallSnapshot`, and `panes.current_url`
+  is a legacy column alongside `home_url` — still in the schema, because
+  dropping a SQLite column means rebuilding the table, but no longer written
+  or read.
 
 ### 9. Several pages in one pane: switching is tested, the control is not
 
