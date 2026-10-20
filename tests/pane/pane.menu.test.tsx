@@ -89,24 +89,38 @@ function typeAndSubmit(raw: string): void {
   fireEvent.submit(input.closest("form")!);
 }
 
-describe("the strip is the only permanent chrome, and ⋮ opens the rest", () => {
-  test("a closed pane shows the strip and nothing else", () => {
+describe("⋮ is the only permanent chrome, and it opens the rest", () => {
+  test("a closed pane shows the button and nothing else", () => {
     render(<AppShell />);
 
-    expect(screen.getByTestId(`pane-strip-${ROOT}`)).toBeDefined();
+    expect(screen.getByTestId(`pane-menu-button-${ROOT}`)).toBeDefined();
     expect(screen.queryByTestId(`pane-menu-${ROOT}`)).toBeNull();
     expect(screen.queryByLabelText(`URL for pane ${ROOT}`)).toBeNull();
     expect(screen.queryByTestId(`pane-close-${ROOT}`)).toBeNull();
   });
 
-  test("the strip names the pane's host, and says so when there is none", async () => {
+  test("the chrome carries no host label of its own", async () => {
     render(<AppShell />);
-    expect(screen.getByTestId(`pane-strip-${ROOT}`).textContent).toContain("Empty");
-
     await loadUrl(ROOT, "https://example.com/some/deep/path");
 
-    expect(screen.getByTestId(`pane-strip-${ROOT}`).textContent).toContain(
-      "example.com",
+    // The label was what made a wall of panes look stitched together. The host
+    // survives only as the button's tooltip, which costs no pixels.
+    const chrome = screen.getByTestId(`pane-chrome-${ROOT}`);
+    expect(chrome.textContent).not.toContain("example.com");
+    expect(screen.getByTestId(`pane-menu-button-${ROOT}`).getAttribute("title")).toBe(
+      "https://example.com/some/deep/path",
+    );
+  });
+
+  test("the iframe pane reserves no height for its chrome", () => {
+    render(<AppShell />);
+
+    // happy-dom measures nothing, so this asserts the mechanism rather than the
+    // result: an absolutely positioned chrome is the only kind that takes no
+    // room from the body. Whether it is really flush is a question for a
+    // running browser.
+    expect(screen.getByTestId(`pane-chrome-${ROOT}`).className).toContain(
+      "noc-pane__chrome--floating",
     );
   });
 
@@ -121,10 +135,10 @@ describe("the strip is the only permanent chrome, and ⋮ opens the rest", () =>
     expect(screen.queryByTestId(`pane-menu-${ROOT}`)).toBeNull();
   });
 
-  test("right-click on the strip opens the same menu", () => {
+  test("right-click on the chrome opens the same menu", () => {
     render(<AppShell />);
 
-    fireEvent.contextMenu(screen.getByTestId(`pane-strip-${ROOT}`));
+    fireEvent.contextMenu(screen.getByTestId(`pane-chrome-${ROOT}`));
 
     expect(screen.getByTestId(`pane-menu-${ROOT}`)).toBeDefined();
   });
@@ -162,6 +176,21 @@ describe("the strip is the only permanent chrome, and ⋮ opens the rest", () =>
     fireEvent.mouseDown(screen.getByLabelText(`URL for pane ${ROOT}`));
 
     expect(screen.getByTestId(`pane-menu-${ROOT}`)).toBeDefined();
+  });
+
+  test("focus follows the menu in and comes back out to ⋮", () => {
+    render(<AppShell />);
+
+    openMenu(ROOT);
+    expect(document.activeElement).toBe(
+      screen.getByLabelText(`URL for pane ${ROOT}`),
+    );
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(document.activeElement).toBe(
+      screen.getByTestId(`pane-menu-button-${ROOT}`),
+    );
   });
 
   test("each pane's menu is its own", () => {
