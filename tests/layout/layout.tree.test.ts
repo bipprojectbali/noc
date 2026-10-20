@@ -6,6 +6,7 @@ import {
   listTreePaneIds,
   MIN_FRACTION,
   resizeSplit,
+  setPaneStrategy,
   setPaneUrl,
   splitPane,
 } from "../../src/layout/layout.tree.ts";
@@ -196,6 +197,33 @@ describe("dockPane and undockPane", () => {
     expect(() => undockPane(tree, "n3", "n1", "row", makeId)).toThrow(
       /is docked and cannot host/,
     );
+  });
+});
+
+describe("setPaneStrategy", () => {
+  test("changes only the one pane's strategy and keeps the rest of it", () => {
+    const makeId = idFactory();
+    let tree = splitPane(createTree(makeId, 1), "n1", "row", makeId, 2);
+    tree = setPaneUrl(tree, "n1", "https://example.com/");
+
+    tree = setPaneStrategy(tree, "n1", "webview");
+
+    expect(tree.nodes.n1).toMatchObject({
+      kind: "pane",
+      strategy: "webview",
+      url: "https://example.com/",
+      createdAt: 1,
+    });
+    // Siblings keep the default: the choice is per pane, not per wall.
+    expect(tree.nodes.n3).toMatchObject({ strategy: "auto" });
+    assertWellFormed(tree);
+  });
+
+  test("refuses an id that is not a pane", () => {
+    const makeId = idFactory();
+    const tree = splitPane(createTree(makeId, 1), "n1", "row", makeId, 2);
+
+    expect(() => setPaneStrategy(tree, "n2", "iframe")).toThrow();
   });
 });
 
