@@ -114,6 +114,19 @@
 
 ### Fixed
 
+- The desktop app saves again. In a built `.app`, the wall opened with a red
+  ribbon saying the layout could not be loaded and nothing would be stored:
+  the database was being put at `/.noc-data/noc.sqlite`, on the read-only root
+  volume. The default data directory is relative, which is right when the
+  server is started from the project, and the OS launches a bundled app with
+  its working directory at `/` — so a layout, and every page in it, was lost
+  on every quit. The shell now hands the server the per-application data
+  directory macOS keeps for this (`~/Library/Application Support`) and creates
+  it before starting, instead of leaving it to a default that depends on where
+  the app happened to be launched from. A `NOC_DATA_DIR` you set yourself
+  still wins. Reasoned and type-checked only; nobody has yet run a built
+  `.app` and watched the ribbon stay away.
+
 - Reloading the wall no longer throws away where a pane had got to. In the
   desktop app, every pane was sent back to the address it was stored with the
   moment the wall page reloaded, so a pane you had just signed into came back
