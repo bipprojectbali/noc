@@ -9,6 +9,7 @@ import { geometryRegistry } from "../geometry/geometry.store.ts";
 import {
   createTree,
   resizeSplit,
+  setPaneStrategy,
   setPaneUrl,
   setPaneUrlBarVisible,
   splitPane,
@@ -18,11 +19,13 @@ import {
   dockPane,
   undockPane,
 } from "../layout/layout.remove.ts";
-import type {
-  LayoutTree,
-  NodeId,
-  PaneId,
-  SplitDirection,
+import {
+  isPane,
+  type LayoutTree,
+  type NodeId,
+  type PaneId,
+  type PaneStrategy,
+  type SplitDirection,
 } from "../layout/layout.types.ts";
 import {
   INITIAL_PANE_LOAD_STATE,
@@ -32,7 +35,7 @@ import {
 } from "./pane.load-state.ts";
 import type { PersistenceStatus } from "../persist/persist.status.ts";
 import { fetchEmbeddability } from "./pane.probe-client.ts";
-import { releasePane } from "./pane.renderer.ts";
+import { paneRendererFor, releasePane, rendererChange } from "./pane.renderer.ts";
 import { normalizePaneUrl } from "./pane.url.ts";
 
 export type WallState = {
@@ -55,6 +58,11 @@ export type WallState = {
   reloadPane: (paneId: PaneId) => void;
   clearPane: (paneId: PaneId) => void;
   setUrlBarVisible: (paneId: PaneId, visible: boolean) => void;
+  /**
+   * Switches which renderer serves a pane. Replaces the pane's content, so the
+   * site in it reloads; the control that calls this says so.
+   */
+  setPaneStrategy: (paneId: PaneId, strategy: PaneStrategy) => void;
   dispatchLoad: (paneId: PaneId, event: PaneLoadEvent) => void;
   splitPane: (paneId: PaneId, direction: SplitDirection) => void;
   deletePane: (paneId: PaneId) => void;
@@ -94,8 +102,28 @@ export function paneLoadState(state: WallState, paneId: PaneId): PaneLoadState {
 }
 
 export const useWallStore = create<WallState>((set, get) => {
+  /** The renderer a pane will really get, for the decisions the store makes. */
+  const rendersAsWebview = (paneId: PaneId): boolean => {
+    const node = get().tree.nodes[paneId];
+    if (node === undefined || !isPane(node)) return false;
+    return paneRendererFor(node.strategy).kind === "webview";
+  };
+
   /** Probes in the background; a result for a stale url is dropped by the reducer. */
   const probe = (paneId: PaneId, url: string): void => {
+    // A native webview loads a top-level document, so no framing header can
+    // refuse it and the fetch would be one nobody reads. The pane still has to
+    // leave `probing`, and "unknown" is already the verdict meaning "go ahead".
+    if (rendersAsWebview(paneId)) {
+      get().dispatchLoad(paneId, {
+        type: "probe-settled",
+        url,
+        verdict: "unknown",
+        reason: "native webview: framing headers do not apply",
+      });
+      return;
+    }
+
     void fetchEmbeddability(url)
       .then((result) => {
         get().dispatchLoad(paneId, {
@@ -172,6 +200,26 @@ export const useWallStore = create<WallState>((set, get) => {
       set((state) => ({
         tree: setPaneUrlBarVisible(state.tree, paneId, visible),
       }));
+    },
+
+    setPaneStrategy: (paneId, strategy) => {
+      const node = get().tree.nodes[paneId];
+      if (node === undefined || !isPane(node) || node.strategy === strategy) {
+        return;
+      }
+      const change = rendererChange(node.strategy, strategy);
+      set((state) => ({ tree: setPaneStrategy(state.tree, paneId, strategy) }));
+      if (!change.changed) return;
+
+      if (change.releases) {
+        // The webview being left behind was never in the DOM, so React dropping
+        // the pane's content cannot take it with it. Without this it keeps
+        // painting over the wall. Delete is the only other place one dies.
+        releasePane(paneId);
+      }
+      // The content is rebuilt either way — that is the reload the control warns
+      // about — and the verdict on file was answered for the other renderer.
+      get().reloadPane(paneId);
     },
 
     dispatchLoad: (paneId, event) => {
