@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { isNativeHost } from "../native/native.bridge.ts";
-import { isPane, type PaneId } from "../layout/layout.types.ts";
-import { usePaneChromeMenuRequests } from "./pane.chrome-channel.ts";
+import { isPane, type PaneId, type PaneSite } from "../layout/layout.types.ts";
+import { usePaneChrome } from "./pane.chrome-channel.ts";
 import { INITIAL_PANE_LOAD_STATE, type PaneLoadState } from "./pane.load-state.ts";
 import { PaneMenu } from "./pane.menu.tsx";
 import { paneRendererFor } from "./pane.renderer.ts";
@@ -14,6 +14,8 @@ export type PaneFrameProps = { paneId: PaneId };
 
 /** Stable identity, so the shallow compare below is not defeated by it. */
 const NO_SITES: readonly PaneLoadState[] = [];
+/** Same, for a pane the tree no longer holds. */
+const NO_PANE_SITES: readonly PaneSite[] = [];
 
 /**
  * One pane: its chrome and its content.
@@ -25,13 +27,14 @@ const NO_SITES: readonly PaneLoadState[] = [];
  * page and discards everything it holds.
  *
  * The chrome floats over that content in both renderers, and no pane spends any
- * height on it. Over an iframe the floating ⋮ is simply visible. Over a native
- * webview it is not — the webview is an OS-level view that paints above the
- * entire web layer — so the shell parks a 40px chrome webview in the same
- * corner and a click there arrives here over `pane.chrome-channel`, which is
- * what let the 20px seam that pane used to reserve go away. Both ⋮ open this
- * one `menuOpen`, and the moment it is open every webview hides, so the DOM
- * button the native one stands in for is back in its place.
+ * height on it. Over an iframe the floating chrome is simply visible. Over a
+ * native webview it is not — the webview is an OS-level view that paints above
+ * the entire web layer — so the shell parks an 88x40 chrome webview in the same
+ * corner, carrying the same ⋮ and the same pips, and its clicks arrive here over
+ * `pane.chrome-channel`. That is what let the 20px seam a webview pane used to
+ * reserve go away. Both ⋮ open this one `menuOpen`, and the moment it is open
+ * every webview hides, so the DOM chrome the native one stands in for is back
+ * in its place.
  *
  * Whether the menu is open lives here rather than in `pane.menu`, because the
  * empty-pane message opens it too: right-click reaches only the surfaces this
@@ -63,15 +66,18 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
   const deletePane = useWallStore((state) => state.deletePane);
   const setPaneStrategy = useWallStore((state) => state.setPaneStrategy);
 
-  // A click on the ⋮ the shell draws over this pane's webview. It names a site
-  // rather than a pane — the shell has no idea panes hold several — so the tree
-  // is asked, live, whether this pane is the one that holds it. Before the
-  // early return below, because a hook cannot be conditional, and from the
-  // store rather than from `node` so no callback can go stale.
-  usePaneChromeMenuRequests((siteId) => {
-    const pane = useWallStore.getState().tree.nodes[paneId];
-    if (pane === undefined || !isPane(pane)) return;
-    if (pane.sites.some((site) => site.id === siteId)) setMenuOpen(true);
+  // The chrome the shell draws over this pane's webview, in both directions:
+  // its clicks come back here, and it is told which pages the pane holds so its
+  // pips can say which one is showing. It only ever names sites, never panes —
+  // the shell has no idea a pane holds several — so the list below is both the
+  // message and the filter. Before the early return, because a hook cannot be
+  // conditional, which is why the pane is read defensively here.
+  const pane = node !== undefined && isPane(node) ? node : null;
+  usePaneChrome({
+    sites: pane?.sites ?? NO_PANE_SITES,
+    activeId: pane?.activeSiteId ?? null,
+    onOpenMenu: () => setMenuOpen(true),
+    onActivate: (siteId) => activateSite(paneId, siteId),
   });
 
   if (node === undefined || !isPane(node)) {

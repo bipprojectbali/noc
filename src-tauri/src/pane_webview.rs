@@ -62,12 +62,28 @@ const PANE_LABEL_PREFIX: &str = "pane-";
 const CHROME_LABEL_PREFIX: &str = "chrome-";
 /// Must stay in step with `PANE_CHROME_PATH` in `src/server/server.chrome-page.ts`.
 const CHROME_PATH: &str = "/pane-chrome";
-/// The side of the chrome webview, logical pixels.
+/// The chrome webview's size, logical pixels.
 ///
-/// It stands in for the floating ⋮ box the web layer draws over an iframe pane,
-/// which is 40px square counting its padding — same number so that the moment
-/// the webviews hide and the DOM chrome appears, the button does not move.
-const CHROME_BOX: f64 = 40.0;
+/// It stands in for the whole floating chrome box the web layer draws over an
+/// iframe pane — the ⋮ and the pips that say which of the pane's pages is on
+/// screen — so it is measured from that box and not chosen: 8px padding, up to
+/// four 8px pips with 4px gaps, a 4px gap, and a 24px button. Matching it is
+/// what makes the swap invisible: the moment every webview hides for an open
+/// menu or a drag, the wall's own chrome appears in this exact rect, and
+/// anything that moved would read as two different controls.
+///
+/// Fixed, which costs something real: unlike the web layer's box, whose padding
+/// is transparent to the pointer, a webview takes every click inside its rect.
+/// So this much of the page's own top-right corner is unreachable — where a
+/// dashboard often keeps its own controls.
+///
+/// ponytail: 88px is the four-pip maximum, paid by every pane including the
+/// single-page ones that show no pips at all. Sizing it per pane means sending
+/// the page count through `pane_webview_show`/`place`, which is a parameter in
+/// two commands, the bridge, the renderer and their tests — worth it if the
+/// dead corner is felt in use, not before.
+const CHROME_WIDTH: f64 = 88.0;
+const CHROME_HEIGHT: f64 = 40.0;
 
 /// The address each pane's webview was last sent to.
 ///
@@ -148,15 +164,16 @@ impl PaneRect {
     /// sit over the neighbour and take that pane's clicks. A rect with no area
     /// has no corner — the pane is not on screen, so neither is its button.
     fn chrome_corner(self) -> Option<PaneRect> {
-        let side = CHROME_BOX.min(self.width).min(self.height);
-        if side <= 0.0 {
+        let width = CHROME_WIDTH.min(self.width);
+        let height = CHROME_HEIGHT.min(self.height);
+        if width <= 0.0 || height <= 0.0 {
             return None;
         }
         Some(PaneRect {
-            x: self.x + self.width - side,
+            x: self.x + self.width - width,
             y: self.y,
-            width: side,
-            height: side,
+            width,
+            height,
         })
     }
 }

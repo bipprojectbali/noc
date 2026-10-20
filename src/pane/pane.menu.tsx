@@ -14,13 +14,13 @@
  * This box floats in both renderers, and over an iframe that is the whole
  * story. Over a native child webview it is invisible — an OS-level view paints
  * above the whole web layer and ignores CSS clipping — and what makes it work
- * anyway is that the pane wears a second one: the shell parks a 40px chrome
- * webview in the same corner, a click there arrives as a `BroadcastChannel`
- * message (`pane.chrome-channel`), and opening the menu hides every webview, so
- * this button takes over in the same place. The 20px row a webview pane used to
- * reserve for a sibling ⋮ is gone with it, which is why a wall of webview panes
- * no longer reads as stitched together. Nothing here branches on the renderer
- * any more; the stand-in is entirely the shell's business.
+ * anyway is that the pane wears a second one: the shell parks an 88x40 chrome
+ * webview in the same corner carrying this same row, a click there arrives as a
+ * `BroadcastChannel` message (`pane.chrome-channel`), and opening the menu hides
+ * every webview, so this box takes over in the same place. The 20px row a
+ * webview pane used to reserve for a sibling copy is gone with it, which is why
+ * a wall of webview panes no longer reads as stitched together. Nothing here
+ * branches on the renderer any more; the stand-in is the shell's business.
  *
  * The panel is an overlay in both cases, the one thing this codebase otherwise
  * forbids. Its licence is `suspendPanePointerCapture`: while it is open every
@@ -66,9 +66,10 @@ export type PaneMenuProps = {
   url: string | null;
   /**
    * The pages this pane holds. The switcher that shows them is a sibling of ⋮
-   * inside this one chrome box, so it floats with it — and is therefore, on a
-   * native pane, hidden behind the webview until a menu is open. The chrome
-   * page stands in for the button only; the pips are not worth a second view.
+   * inside this one chrome box, so it floats with it — and on a native pane the
+   * shell's chrome webview draws the same pips, from the list `pane.frame` sends
+   * it. Not a luxury: the pips are the only control a multi-page pane has that
+   * does not blank every webview on the wall to use.
    */
   sites: PaneSitesControl;
   error: string | null;
