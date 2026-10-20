@@ -1,6 +1,11 @@
 // Gives bun test a DOM so pane components can be rendered and inspected.
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
+// Imported for its side effect, and it has to happen first: it keeps Bun's own
+// fetch stack aside before the line below replaces it, so the proxy tests can
+// run against a real server. See `tests/fixtures/native-globals.ts`.
+import "../fixtures/native-globals.ts";
+
 GlobalRegistrator.register({ url: "http://127.0.0.1:7788/" });
 
 // Iframe page loading stays off so tests never reach the network — a pane only

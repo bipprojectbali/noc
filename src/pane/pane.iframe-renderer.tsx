@@ -15,6 +15,7 @@
  * its scroll position. Hidden is the one way to leave a page alone.
  */
 
+import { proxySiteUrl } from "../proxy/proxy.label.ts";
 import {
   paneContentTestId,
   type PaneContentProps,
@@ -56,7 +57,16 @@ function PaneIframe({ paneId, siteId, load, active }: PaneContentProps) {
 
   // Only these two states have a frameable url; the rest are the chrome's job.
   const hasPage = load.kind === "loading" || load.kind === "ready";
-  const frameSrc = hasPage ? load.url : undefined;
+  const pageUrl = hasPage ? load.url : undefined;
+  // The address the user typed stays the address the store holds and the menu
+  // shows; only the frame is pointed at this wall's own host, which is what
+  // lets the site keep a session (`src/proxy/proxy.label.ts`). On a wall where
+  // that cannot work — `127.0.0.1`, the native shell — this is the typed url
+  // unchanged, so nothing about the pane changes there.
+  const frameSrc =
+    pageUrl === undefined
+      ? undefined
+      : (proxySiteUrl(pageUrl, window.location) ?? pageUrl);
   const showFrame = hasPage && active;
 
   return (
@@ -70,8 +80,11 @@ function PaneIframe({ paneId, siteId, load, active }: PaneContentProps) {
       allow={PANE_ALLOW_POLICY}
       src={frameSrc}
       onLoad={() => {
-        if (frameSrc === undefined) return;
-        dispatchLoad(siteId, { type: "frame-loaded", url: frameSrc });
+        // The typed url, never the proxied one: the load state machine matches
+        // events against the address it is holding, and a proxy hostname would
+        // be discarded as belonging to some other page.
+        if (pageUrl === undefined) return;
+        dispatchLoad(siteId, { type: "frame-loaded", url: pageUrl });
       }}
     />
   );

@@ -6,6 +6,10 @@
 
 import index from "../../index.html";
 import { readConfig } from "../config/config.env.ts";
+import { WALL_PROXY_HOSTNAME } from "../proxy/proxy.label.ts";
+import { createProxyHandler } from "../proxy/proxy.handler.ts";
+import { proxySiteRegistry } from "../proxy/proxy.registry.ts";
+import { proxyWebSocketHandlers } from "../proxy/proxy.socket.ts";
 import {
   COOKIE_DEMO_PAGE_PATH,
   COOKIE_DEMO_READ_PATH,
@@ -14,6 +18,7 @@ import {
   handleCookieDemoRead,
   handleCookieDemoSet,
 } from "./cookie.demo.ts";
+import { WALL_SHELL_PATH, createHostDispatch } from "./server.host-dispatch.ts";
 import { watchParentProcess } from "./server.parent-watch.ts";
 import { readyLine } from "./server.ready.ts";
 import {
@@ -22,7 +27,7 @@ import {
   WALL_PATH,
   WALL_VIEWS_PATH,
   WALL_VIEW_PATH,
-  handleEmbeddability,
+  createEmbeddabilityHandler,
   handleSelfTest,
 } from "./server.routes.ts";
 import { createWallRoutes, openWallAccess } from "./server.wall.ts";
@@ -46,28 +51,44 @@ const wallAccess = openWallAccess(config, process.cwd());
 if (!wallAccess.ok) console.error(wallAccess.reason);
 const wall = createWallRoutes(wallAccess);
 
+// The same socket serves the wall page and every site the wall frames, told
+// apart by `Host`. Still loopback-only: the proxy reaches outward on the
+// server's behalf, which is the surface `/api/embeddability` already had and
+// the reason the bind address is not widened here.
+const dispatch = createHostDispatch({
+  registry: proxySiteRegistry,
+  proxy: createProxyHandler({ registry: proxySiteRegistry }),
+});
+const wallOnly = dispatch.wallOnly;
+
 let server: ReturnType<typeof Bun.serve>;
 try {
   server = Bun.serve({
     hostname: config.host,
     port: config.port,
     routes: {
-      [EMBEDDABILITY_PATH]: handleEmbeddability,
-      [SELF_TEST_PATH]: handleSelfTest,
+      [EMBEDDABILITY_PATH]: wallOnly(
+        createEmbeddabilityHandler({ registry: proxySiteRegistry }),
+      ),
+      [SELF_TEST_PATH]: wallOnly(handleSelfTest),
       // Framable on purpose: the demo only says anything when the wall frames
-      // it from the other loopback host. See `cookie.demo-page.ts`.
-      [COOKIE_DEMO_PAGE_PATH]: handleCookieDemoPage,
-      [COOKIE_DEMO_SET_PATH]: handleCookieDemoSet,
-      [COOKIE_DEMO_READ_PATH]: handleCookieDemoRead,
-      [WALL_PATH]: { GET: wall.getWall, PUT: wall.putWall },
-      [WALL_VIEWS_PATH]: { GET: wall.listViews },
+      // it from the other loopback host. See `cookie.demo-page.ts`. `wallOnly`
+      // does not change that — it only keeps these paths off a proxied site,
+      // which would otherwise lose its own page of the same name.
+      [COOKIE_DEMO_PAGE_PATH]: wallOnly(handleCookieDemoPage),
+      [COOKIE_DEMO_SET_PATH]: wallOnly(handleCookieDemoSet),
+      [COOKIE_DEMO_READ_PATH]: wallOnly(handleCookieDemoRead),
+      [WALL_PATH]: { GET: wallOnly(wall.getWall), PUT: wallOnly(wall.putWall) },
+      [WALL_VIEWS_PATH]: { GET: wallOnly(wall.listViews) },
       [WALL_VIEW_PATH]: {
-        GET: wall.getView,
-        PUT: wall.putView,
-        DELETE: wall.deleteView,
+        GET: wallOnly(wall.getView),
+        PUT: wallOnly(wall.putView),
+        DELETE: wallOnly(wall.deleteView),
       },
-      "/*": index,
+      [WALL_SHELL_PATH]: index,
+      "/*": dispatch.catchAll,
     },
+    websocket: proxyWebSocketHandlers,
   });
 } catch (error) {
   const reason = error instanceof Error ? error.message : String(error);
@@ -82,6 +103,14 @@ try {
 }
 
 console.info(`NOC wall listening on ${server.url.href}`);
+// Both names reach this same socket. The loopback address is what the native
+// shell loads and what the ready line below announces; the proxy host is the
+// one where a framed site can keep its login session, because only there are
+// the panes same-site with the wall. See `src/proxy/proxy.label.ts`.
+console.info(
+  `In a browser, open http://${WALL_PROXY_HOSTNAME}:${server.port}/ ` +
+    `so panes can hold a session.`,
+);
 // Machine-readable, and only after the socket is bound: whoever spawned this
 // process may be waiting on it to learn the ephemeral port.
 console.info(readyLine(server.url.href));
