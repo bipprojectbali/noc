@@ -3,10 +3,10 @@ import { describe, expect, test } from "bun:test";
 import {
   createNativeCookieBridge,
   type CookieImportReport,
-  type NativeCookie,
 } from "../../src/native/native.bridge.ts";
+import type { SessionCookie } from "../../src/session/session.types.ts";
 
-const cookie: NativeCookie = {
+const cookie: SessionCookie = {
   name: "session",
   value: "abc",
   domain: ".grafana.internal",

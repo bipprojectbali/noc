@@ -23,6 +23,7 @@ src/pane/     UI pane (tombol ⋮ + menu panel), URL, state machine load, store,
 src/persist/  port persist, client HTTP, repository SQLite, snapshot, writer
 src/resize/   splitter, aritmetika drag, seam penekan pointer
 src/server/   entrypoint, routes, probe header, ready line, parent watch
+src/session/  impor cookie: types, parser murni, store zustand sendiri
 src-tauri/src 4 file Rust (570 baris): main.rs, sidecar.rs, pane_webview.rs, cookie_import.rs
 tests/        mirror src/ + tests/setup/ + tests/fixtures/
 ```
@@ -68,6 +69,7 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 - `cookie_import` (`src-tauri/src/cookie_import.rs`) menanam cookie ekspor browser ke cookie store WebKit supaya pane tak minta login ulang. Ia **global, bukan per pane**: pane dibangun dengan `WebviewBuilder` polos — tanpa `incognito`, tanpa `data_store_identifier` — jadi semua berbagi `WKWebsiteDataStore::defaultDataStore`, dan webview window wall adalah pegangan yang sama atas store itu. Sekali impor berlaku untuk seluruh dinding.
 - **Command ini membaca ulang store, dan itu bukan paranoia.** `Webview::set_cookie` fire-and-forget satu lapis di bawah: Tauri mengembalikan `Ok(())` begitu pesan masuk antrean, dan kalau WebKit menolak cookie-nya tauri-runtime-wry cuma menulis `log::error!`. Jadi yang dilaporkan adalah hasil `cookies()` sesudahnya (`stored`, `failedDomains`), bukan jumlah yang dikirim. Jangan "sederhanakan" jadi menghitung input.
 - Command-nya `async` dengan sengaja: membaca cookie store memblokir sampai WebKit menjawab, dan Tauri mendokumentasikan itu deadlock bila dilakukan dari command sinkron di Windows. Input divalidasi (`usable`) karena `NSHTTPCookie::cookieWithProperties` mengembalikan nil untuk dictionary cacat dan wry mengubah nil itu jadi `expect` — panik yang menjatuhkan shell. `SameSite::None` di-drop wry di macOS; itu batas upstream, bukan bug di sini.
+- Sisi web-nya **bukan** di `pane.store`: `src/session/session.store.ts` punya store zustand sendiri (parse → `nativeCookieBridge.importCookies` → `reloadEveryPane`) karena impor itu global untuk dinding, bukan milik satu pane. `session.store` boleh mengimpor `pane.store`; sebaliknya tidak pernah. **Reload sesudah impor bukan pemanis** — cookie yang ditanam tak berefek pada halaman yang sudah terlanjut dimuat, jadi tanpa itu fitur terlihat gagal total. `SessionCookie` (`session.types.ts`) satu-satunya deklarasi baris cookie; `native.bridge.ts` mengimpornya, jangan deklarasikan ulang.
 
 ## Konvensi kode
 
