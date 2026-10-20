@@ -43,6 +43,15 @@ export type PaneContentProps = {
    * or its session, which unmounting would.
    */
   active: boolean;
+  /**
+   * How much to magnify this page, 1 being 100%. Served by the iframe renderer
+   * and ignored by the webview one — a native child webview is an OS-level
+   * view that no CSS reaches, and magnifying it would mean a fifth `invoke`.
+   * Passed to both anyway, like `place` and `release`: a prop the renderer does
+   * not use costs nothing, and branching here would put renderer knowledge back
+   * into the layer that is meant not to have any.
+   */
+  zoom: number;
 };
 
 export type PaneRenderer = {

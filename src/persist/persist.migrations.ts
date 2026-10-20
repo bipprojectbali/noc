@@ -5,9 +5,23 @@
  * replay even if the version row is lost or a previous run died halfway. The
  * version row is what stops the *data* parts of a future step from running
  * twice; the guards are what stop the structural parts from erroring.
+ *
+ * One statement cannot do that, and `addsColumn` is the answer to it: SQLite
+ * has no `ADD COLUMN IF NOT EXISTS`, so a step that adds a column says which
+ * one, and `persist.database` skips the whole step when the column is already
+ * there. Whole, not statement by statement, because a step is one transaction:
+ * its data statements committed together with its DDL or not at all, so the
+ * column's presence is proof the rest landed too.
  */
 
-export const MIGRATIONS: readonly { version: number; statements: readonly string[] }[] = [
+export type MigrationStep = {
+  version: number;
+  statements: readonly string[];
+  /** The one column this step adds, when it adds one. See above. */
+  addsColumn?: { table: string; column: string };
+};
+
+export const MIGRATIONS: readonly MigrationStep[] = [
   {
     // The wall is described one row per thing the user can see and change, not
     // as a single JSON blob: sizes are rewritten on every splitter drag, and a
@@ -138,6 +152,29 @@ export const MIGRATIONS: readonly { version: number; statements: readonly string
       // deliberate: a migration records history and must not drift with
       // `ROW_TREE_VERSION`.
       `UPDATE layouts SET layout_version = 2 WHERE layout_version = 1`,
+    ],
+  },
+  {
+    // How much a page is magnified. A column on `pane_sites` rather than a
+    // table of its own: it is one number per site, always present, and the
+    // reason version 2 avoided `ALTER TABLE` was that a *list* does not fit in
+    // a column. What stays true is the replay problem, and `addsColumn` above
+    // is how this step answers it.
+    version: 3,
+    addsColumn: { table: "pane_sites", column: "zoom" },
+    statements: [
+      // `DEFAULT 1` is what makes this safe on a table that already has rows:
+      // every site stored before zoom existed comes back at 100%, which is
+      // exactly how it was last seen. The default is also what a future
+      // `INSERT` without the column would get, and `persist.rows` always
+      // writes it, so nothing depends on that.
+      `ALTER TABLE pane_sites ADD COLUMN zoom REAL NOT NULL DEFAULT 1`,
+      // The rows now express a version 3 tree. Same reason as the stamp in
+      // step 2: without it the next read runs the 2 → 3 tree migration over
+      // rows that already carry a zoom. That migration keeps a usable zoom
+      // rather than overwriting it, so this is belt and braces — but the
+      // stamp is the contract, and the migration being forgiving is not.
+      `UPDATE layouts SET layout_version = 3 WHERE layout_version = 2`,
     ],
   },
 ];

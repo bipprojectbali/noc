@@ -29,6 +29,7 @@ import type {
   PaneSite,
   SiteId,
 } from "./layout.types.ts";
+import { clampZoom, DEFAULT_ZOOM } from "./layout.zoom.ts";
 
 /** The address the pane is showing, or `null` while it holds none. */
 export function activePaneUrl(pane: PaneNode): string | null {
@@ -79,7 +80,7 @@ export function addSite(
   now: number,
 ): LayoutTree {
   const pane = requirePane(tree, paneId);
-  const site: PaneSite = { id: makeId(), url, createdAt: now };
+  const site: PaneSite = { id: makeId(), url, createdAt: now, zoom: DEFAULT_ZOOM };
   return writePane(tree, pane, {
     sites: [...pane.sites, site],
     activeSiteId: site.id,
@@ -122,6 +123,30 @@ export function setActiveSite(
   const pane = requirePane(tree, paneId);
   requireSite(pane, siteId);
   return writePane(tree, pane, { activeSiteId: siteId });
+}
+
+/**
+ * Magnifies one page, keeping its id and its place.
+ *
+ * Clamped here rather than trusted from the caller: this is the one door into
+ * the field, and what comes through it is also what gets written to disk. The
+ * site's own `zoom` survives a new address — repointing a pane is a change of
+ * page, not a change of how big the operator needs it.
+ */
+export function setSiteZoom(
+  tree: LayoutTree,
+  paneId: PaneId,
+  siteId: SiteId,
+  zoom: number,
+): LayoutTree {
+  const pane = requirePane(tree, paneId);
+  requireSite(pane, siteId);
+  const level = clampZoom(zoom);
+  return writePane(tree, pane, {
+    sites: pane.sites.map((site) =>
+      site.id === siteId ? { ...site, zoom: level } : site,
+    ),
+  });
 }
 
 /** Points one site at a different address, keeping its id and its place. */

@@ -511,6 +511,46 @@ body.noc-resizing .noc-pane__menu {
   cursor: pointer;
 }
 
+/* The select's geometry, divided rather than spaced, so the zoom row and the
+   renderer row above it read as one group. The readout is also the reset, so
+   it is the widest target and keeps its colour while disabled. */
+.noc-pane__zoom {
+  display: flex;
+  flex: 1;
+  height: 28px;
+  overflow: hidden;
+  border: 1px solid var(--noc-border);
+  border-radius: 4px;
+}
+
+.noc-pane__zoom button {
+  width: 28px;
+  color: var(--noc-text);
+  background: var(--noc-bg);
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.noc-pane__zoom-level {
+  flex: 1;
+  border-inline: 1px solid var(--noc-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.noc-pane__zoom button:hover:not(:disabled),
+.noc-pane__zoom button:focus-visible {
+  background: var(--noc-border);
+}
+
+.noc-pane__zoom button:disabled {
+  cursor: default;
+}
+
+.noc-pane__zoom-step:disabled {
+  color: var(--noc-muted);
+}
+
 /* Frame and status share one grid cell instead of being stacked with absolute
    positioning, so the frame keeps its box while hidden and the status can take
    the slot without being painted over. */

@@ -12,7 +12,11 @@ onto another pane's edge to land beside it, or onto its middle to trade the two
 places, with no page reloading either way. A pane's whole chrome is now one ⋮
 button, floating over the top-right corner of an iframe pane and costing it no
 height at all; it opens a dropdown holding the address field, the renderer
-picker, Reload, Split right, Split down and Close. Each pane can be drawn as an
+picker, a zoom row, Reload, Split right, Split down and Close. The zoom row
+steps the page a pane is showing along the browser's own ladder, 50% to 200%,
+so a dashboard built for a full screen can be shrunk until it fits or a small
+number enlarged until it is legible from across the room; the level belongs to
+the page rather than the pane, and is saved with it. Each pane can be drawn as an
 iframe or as a native webview, and a webview pane keeps a 20px seam for its
 button because an OS-level view cannot be drawn over. A pane can also hold
 several pages at once: every one of them stays loaded, the switch sits on the
@@ -681,3 +685,49 @@ no further.
 bounces to login. Sign in, reload the wall, and watch whether the pane comes
 back signed in. Where it fails, the question worth answering first is which of
 the four above did it.
+
+### 13. Zoom works, and was watched working, against a stand-in page
+
+**Known.** Measured in Chrome 155 driving the real wall, not a test harness, in
+a 1400×788 pane framing a grid of 100px cells. At 100% the framed page reported
+an inner viewport of 1398×786 with 32 cells on screen. At 50% the same pane
+reported 2796×1572 and **64 cells** — zoom out really adds content rather than
+only shrinking type, which is the entire point and the thing a paint-level
+scale would have failed. At 200%, 20 cells and an inner viewport of 699×393.
+
+Clicks land where they look. The same screen point, 150px into the pane on both
+axes, hit `c5` at 100% and `c10` at 50% — exactly the cell at the inner
+coordinate the magnification implies — and at 200%, with the page scrolled,
+`c128`, which is again precisely right once the scroll offset is counted. A
+wheel of 400px at 50% moved the framed page 800px, so scrolling works at a
+factor that is not 1. The magnification is written on the `<iframe>` element
+itself: the host above it, which carries the geometry layer's transform, stays
+untouched.
+
+It survives a reload. Set to 200%, the wall page was reloaded in the browser
+and the pane came back at 200%, factor and readout both — so the column added
+to the database is doing its job end to end. It belongs to the page and not to
+the pane: with two pages in one pane, stepping the second to 80% left the first
+sitting at 200%, and the readout followed the switch between them. A marker
+written into the first page's DOM was still there afterwards, so neither
+magnifying nor switching reloaded it.
+
+The control fits. The panel measures 224px, the zoom row 216×36 inside it, four
+pixels of margin to spare, and a screenshot shows it reading `Zoom − 200% +`
+under the renderer picker with the `+` visibly dimmed at the top of the ladder.
+
+**Not known.** The stand-in problem again: no real dashboard has been magnified
+through this. A page that sets its own viewport, or that lays out from
+`window.innerWidth` on a resize it never sees, may not behave like a plain grid.
+Legibility from across a room — the reason the feature exists — has not been
+judged on an actual wall-mounted monitor, only in a window on a desk. The native
+webview renderer is not covered at all: the row disables itself there, which is
+a unit-tested branch and an unwatched one, and no measurement says what a
+sensible desktop-side zoom would cost. There is no keyboard shortcut and no
+pinch: the panel is the only way in, which is a cross-origin limit rather than a
+choice, but whether operators find three clicks acceptable is unanswered.
+
+**One step.** Point a pane at a real dashboard built for a full screen, step it
+to 50%, and read it from where the wall is actually watched. If something
+reflows wrongly, the first thing to check is whether the page sizes itself from
+`innerWidth` at load rather than on the resize the magnification causes.

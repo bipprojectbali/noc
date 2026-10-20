@@ -26,10 +26,28 @@ function readVersion(db: Database): number {
   return row?.version ?? 0;
 }
 
+/** Whether the table already carries the column, for steps that add one. */
+function hasColumn(db: Database, table: string, column: string): boolean {
+  return (
+    db
+      .query<{ name: string }, [string, string]>(
+        "SELECT name FROM pragma_table_info(?) WHERE name = ?",
+      )
+      .get(table, column) !== null
+  );
+}
+
 /**
  * Applies every step the file has not seen yet, inside one transaction per
  * step, and returns the version it ended on. Replaying this is a no-op: the
  * version row gates the steps and every statement is guarded anyway.
+ *
+ * `addsColumn` is the one guard that cannot live in the statement, because
+ * SQLite has no `ADD COLUMN IF NOT EXISTS` — see `persist.migrations`. The
+ * whole step is skipped, not just the `ALTER`: a step is one transaction, so a
+ * column that exists is proof its step committed, whatever the version row has
+ * since been rewound to. The stamp below still runs, which is what puts the
+ * file back in agreement with itself.
  */
 export function migrate(db: Database, now: number): number {
   db.run(SCHEMA_VERSION_DDL);
@@ -37,8 +55,11 @@ export function migrate(db: Database, now: number): number {
   let version = readVersion(db);
   for (const step of MIGRATIONS) {
     if (step.version <= version) continue;
+    const applied =
+      step.addsColumn !== undefined &&
+      hasColumn(db, step.addsColumn.table, step.addsColumn.column);
     db.transaction(() => {
-      for (const statement of step.statements) db.run(statement);
+      if (!applied) for (const statement of step.statements) db.run(statement);
       db.run(
         `INSERT INTO schema_version (id, version, applied_at) VALUES (1, ?, ?)
          ON CONFLICT (id) DO UPDATE SET version = excluded.version,
