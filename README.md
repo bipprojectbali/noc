@@ -7,9 +7,10 @@ Router (library mode) and Zustand.
 
 The wall renders a tree of panes with a draggable splitter between every pair.
 Splits, docking and deletion are wired through the store and proven not to
-disturb a pane's iframe. There is still no UI to create or close a pane — that
-is M5, and until it lands a splitter only appears on a wall that was split
-through the store.
+disturb a pane's iframe. Every pane now carries controls that reach those
+actions, and each pane can be drawn as an iframe or as a native webview — both
+built and unit-tested, neither yet seen on screen. The desktop shell is real:
+it runs the server as a sidecar and puts a native webview in each pane.
 
 | Milestone | State |
 | --- | --- |
@@ -57,7 +58,8 @@ structural depends on the choice, so it can be revisited cheaply.
 ## Requirements
 
 - Bun 1.2.17 or newer (HTML imports must work with `bun build --compile`).
-- Rust toolchain — only for the Tauri milestone, not needed yet.
+- Rust toolchain — needed for the desktop shell (`bun run tauri:dev`), not for
+  the browser build.
 
 ## Run
 
