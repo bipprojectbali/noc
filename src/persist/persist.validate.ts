@@ -99,9 +99,9 @@ export function parseWallSnapshot(value: unknown): WallSnapshot {
     fail(`"layout" holds ${nodeCount} nodes, more than the limit of ${MAX_NODES}`);
   }
 
-  // A site url is handed straight to a frame on the next restart, so it gets
-  // the same treatment as a `currentUrls` entry rather than being trusted for
-  // having arrived inside the tree.
+  // A site url is handed straight to a frame on the next restart, so it is
+  // checked rather than trusted for having arrived inside the tree. These are
+  // now the only urls in a payload; anything else a client sends is ignored.
   for (const node of Object.values(tree.nodes)) {
     if (!isPane(node)) continue;
     if (node.sites.length > MAX_SITES_PER_PANE) {
@@ -116,20 +116,7 @@ export function parseWallSnapshot(value: unknown): WallSnapshot {
 
   const settings = parseSettings(raw.settings);
 
-  const currentUrls: Record<string, string | null> = {};
-  if (raw.currentUrls !== undefined) {
-    const entries = asRecord(raw.currentUrls, "currentUrls");
-    for (const [paneId, url] of Object.entries(entries)) {
-      const node = tree.nodes[paneId];
-      if (node === undefined || !isPane(node)) {
-        fail(`"currentUrls" names "${paneId}", which is not a pane in this layout`);
-      }
-      currentUrls[paneId] =
-        url === null ? null : parseStoredUrl(url, `currentUrls.${paneId}`);
-    }
-  }
-
-  return { layout: serializeLayout(tree), settings, currentUrls };
+  return { layout: serializeLayout(tree), settings };
 }
 
 /**

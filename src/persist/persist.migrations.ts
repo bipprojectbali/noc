@@ -30,11 +30,14 @@ export const MIGRATIONS: readonly { version: number; statements: readonly string
          updated_at INTEGER NOT NULL
        )`,
 
-      // `home_url` is what the user typed and is the pane's identity to them;
-      // `current_url` is where it actually ended up and may be null because a
-      // pane can exist before it has ever loaded anything. Version 2 moved
-      // addresses into `pane_sites` and left `home_url` behind as legacy; see
-      // `persist.rows.ts` for who still touches either column.
+      // `home_url` was what the user typed; `current_url` was meant to hold
+      // where the pane actually ended up. Both are legacy and neither is
+      // written any more: version 2 moved addresses into `pane_sites`, and a
+      // pane's "current" url turned out never to differ from its site's own,
+      // because a cross-origin page never tells us where it navigated. Both
+      // columns stay in the schema — dropping one in SQLite means rebuilding
+      // the table — and this statement stays verbatim so that the 1 → 2 step
+      // below still has the shape it migrates from. See `persist.rows.ts`.
       `CREATE TABLE IF NOT EXISTS panes (
          id TEXT NOT NULL,
          layout_id TEXT NOT NULL REFERENCES layouts(id) ON DELETE CASCADE,

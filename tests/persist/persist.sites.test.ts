@@ -64,7 +64,6 @@ describe("a pane's sites survive a restart", () => {
     const snapshot: WallSnapshot = {
       layout: serializeLayout(tree),
       settings: { ...DEFAULT_WALL_SETTINGS },
-      currentUrls: { [paneId]: "https://two.example/dashboard" },
     };
 
     const first = openFile(1);
@@ -95,7 +94,7 @@ describe("a pane's sites survive a restart", () => {
 
     const opened = openFile(1);
     const repository = createWallRepository(opened.db, () => 2);
-    const base = { settings: { ...DEFAULT_WALL_SETTINGS }, currentUrls: {} };
+    const base = { settings: { ...DEFAULT_WALL_SETTINGS } };
     repository.saveWall({ ...base, layout: serializeLayout(tree) });
 
     const trimmed = addSite(
@@ -136,7 +135,6 @@ describe("a pane's sites survive a restart", () => {
     repository.saveWall({
       layout: serializeLayout(tree),
       settings: { ...DEFAULT_WALL_SETTINGS },
-      currentUrls: {},
     });
     const loaded = repository.loadWall();
     opened.db.close();
@@ -215,8 +213,9 @@ describe("a wall stored by the version 1 schema still opens", () => {
       },
     ]);
     expect(migrated.activeSiteId).toBe("pane-a-s1");
-    // Where it had actually navigated to is per pane and keeps its own column.
-    expect(loaded?.currentUrls["pane-a"]).toBe("https://grafana.internal/d/one?x=1");
+    // The row also carries a `current_url` ("…?x=1"), which is a legacy column
+    // nothing reads any more — the site above comes from `home_url`, and the
+    // assertion on it is what fails if that column is ever reconnected.
     // A pane that never held an address gets no site rather than an empty one.
     expect(paneOf(tree, "pane-b").sites).toEqual([]);
     expect(paneOf(tree, "pane-b").activeSiteId).toBeNull();

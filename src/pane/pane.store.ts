@@ -52,16 +52,11 @@ export type WallState = {
   persistence: PersistenceStatus;
   setPersistence: (status: PersistenceStatus) => void;
   /**
-   * Replaces the whole wall with a restored layout. Every site in it is checked
-   * for framing again, because a site's headers can change overnight. The two
-   * trailing arguments are the per-pane seed `persist.sync` still passes and
-   * this store no longer uses; see `pane.store-sites`.
+   * Replaces the whole wall with a restored layout. The tree carries every
+   * site's address, so it is the only argument needed; every site in it is
+   * checked for framing again, because a site's headers can change overnight.
    */
-  restoreLayout: (
-    tree: LayoutTree,
-    load?: Record<PaneId, PaneLoadState>,
-    toProbe?: { paneId: PaneId; url: string }[],
-  ) => void;
+  restoreLayout: (tree: LayoutTree) => void;
   /** Points the pane's active site at a typed address, or gives an empty pane its first. */
   submitUrl: (paneId: PaneId, raw: string) => void;
   /** Appends a page to the pane and shows it. Same validation as `submitUrl`. */

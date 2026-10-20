@@ -10,7 +10,7 @@ import type { StoreApi } from "zustand";
 
 import type { WallState } from "../pane/pane.store.ts";
 import { mayWrite } from "./persist.status.ts";
-import { seedLoadStates, toSnapshot } from "./persist.snapshot.ts";
+import { toSnapshot } from "./persist.snapshot.ts";
 import {
   DEFAULT_WALL_SETTINGS,
   type WallPersistPort,
@@ -39,15 +39,13 @@ export function startWallPersistence(
   let stopped = false;
 
   const saveChanges = (): void => {
+    // The tree is the whole of what gets stored, so load-state churn — a probe
+    // settling, a frame reporting itself ready — is not a reason to write.
     unsubscribe = store.subscribe((state, previous) => {
-      if (state.tree === previous.tree && state.load === previous.load) return;
+      if (state.tree === previous.tree) return;
       if (!mayWrite(state.persistence)) return;
       port.saveWall(
-        toSnapshot({
-          tree: state.tree,
-          load: state.load,
-          settings: DEFAULT_WALL_SETTINGS,
-        }),
+        toSnapshot({ tree: state.tree, settings: DEFAULT_WALL_SETTINGS }),
       );
     });
   };
@@ -55,8 +53,7 @@ export function startWallPersistence(
   const ready = port.loadWall().then(
     (snapshot) => {
       if (snapshot !== null) {
-        const seeded = seedLoadStates(snapshot);
-        store.getState().restoreLayout(snapshot.layout.tree, seeded.load, seeded.toProbe);
+        store.getState().restoreLayout(snapshot.layout.tree);
       }
       store.getState().setPersistence({ kind: "ready" });
       // A stop that arrived while the load was in flight must not subscribe.

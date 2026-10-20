@@ -8,7 +8,6 @@
  */
 
 import type { SerializedLayout } from "../layout/layout.serializer.ts";
-import type { PaneId } from "../layout/layout.types.ts";
 
 /** Wall-wide rules, stored one row per key so a new rule needs no migration. */
 export type WallSettings = {
@@ -27,14 +26,14 @@ export const DEFAULT_WALL_SETTINGS: WallSettings = {
  * One restorable wall.
  *
  * `layout` carries its own version stamp from `layout.serializer`, so the tree
- * shape migrates independently of the database schema. `currentUrls` holds
- * where each pane actually ended up, which can differ from the home URL the
- * user typed into its URL bar.
+ * shape migrates independently of the database schema. It also carries every
+ * address: a pane's `sites` list is the only record of what it shows. There was
+ * once a `currentUrls` map beside it, meant to hold where a pane had navigated
+ * to on its own — it never could, so it is gone; see `persist.snapshot.ts`.
  */
 export type WallSnapshot = {
   layout: SerializedLayout;
   settings: WallSettings;
-  currentUrls: Record<PaneId, string | null>;
 };
 
 export type SavedViewSummary = {

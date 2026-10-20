@@ -184,10 +184,8 @@ export function createWallSitesSlice(set: SetWall, get: GetWall): WallSitesSlice
 
   return {
     restoreLayout: (tree: LayoutTree) => {
-      // The seeded load record and probe list that `persist.sync` passes are
-      // ignored on purpose: they are keyed per pane, from a time when a pane
-      // held one address, and the restored tree already carries every site's
-      // url. The parameters stay because that layer calls with them.
+      // The tree is the whole input: it already carries every site's url, which
+      // is why `persist.sync` no longer seeds load state per pane.
       const load: Record<SiteId, PaneLoadState> = {};
       const pending: { paneId: PaneId; siteId: SiteId; url: string }[] = [];
       for (const node of Object.values(tree.nodes)) {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { serializeLayout } from "../../src/layout/layout.serializer.ts";
-import { createTree, listTreePaneIds, splitPane } from "../../src/layout/layout.tree.ts";
+import { createTree, splitPane } from "../../src/layout/layout.tree.ts";
 import { openWallDatabase } from "../../src/persist/persist.database.ts";
 import { createWallRepository } from "../../src/persist/persist.repository.ts";
 import {
@@ -22,15 +22,13 @@ const makeId = () => {
   return `pane-${counter}`;
 };
 
-/** A wall with two panes, one of them showing a page and one still empty. */
+/** A wall with two panes, neither holding an address yet. */
 function sampleSnapshot(): WallSnapshot {
   const root = createTree(makeId, 1000);
   const tree = splitPane(root, root.rootId, "row", makeId, 1100);
-  const [shown, empty] = listTreePaneIds(tree);
   return {
     layout: serializeLayout(tree),
     settings: { ...DEFAULT_WALL_SETTINGS },
-    currentUrls: { [shown ?? ""]: "https://example.com/", [empty ?? ""]: null },
   };
 }
 
