@@ -24,10 +24,7 @@
 import { useRef } from "react";
 
 import type { PaneId } from "../layout/layout.types.ts";
-import {
-  useSessionImport,
-  type SessionImportState,
-} from "./session.store-contract.ts";
+import { useSessionStore, type SessionImportState } from "./session.store.ts";
 
 export type SessionMenuItemProps = {
   paneId: PaneId;
@@ -63,7 +60,13 @@ function doneText(state: Extract<SessionImportState, { kind: "done" }>): string 
 
 export function SessionMenuItem({ paneId, nativeHost }: SessionMenuItemProps) {
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const { state, importFromText } = useSessionImport();
+  // Read straight from the wall-global store rather than through props: this
+  // row is rendered two levels below `PaneFrame`, and drilling a wall-wide
+  // concern through per-pane components would make it look pane-scoped. Two
+  // selectors, not one object, so the row re-renders only when the import
+  // state really changes.
+  const state = useSessionStore((store) => store.importState);
+  const importFromText = useSessionStore((store) => store.importFromText);
 
   const pick = async (input: HTMLInputElement): Promise<void> => {
     const file = input.files?.[0];

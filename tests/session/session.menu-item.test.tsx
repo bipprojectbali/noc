@@ -1,11 +1,12 @@
 /**
  * The cookie-import row of the ⋮ menu, from both sides of the host boundary.
  *
- * The store is faked at the registry seam rather than by replacing a module,
- * so the real panel, the real menu and the real `PaneFrame` are all in the
- * test — which is the only way the host branch is exercised at all, since
- * `nativeHost` is decided in `pane.frame` from the same `__TAURI_INTERNALS__`
- * sniff the shell really does.
+ * The store is faked by writing over the real singleton's state — the same
+ * trick `tests/fixtures/wall-store.ts` plays on the wall store — rather than
+ * by replacing a module, so the real panel, the real menu and the real
+ * `PaneFrame` are all in the test. That is the only way the host branch is
+ * exercised at all, since `nativeHost` is decided in `pane.frame` from the
+ * same `__TAURI_INTERNALS__` sniff the shell really does.
  *
  * What is NOT covered, and cannot be: clicking the row opens an OS file
  * panel, and happy-dom has none. The test fires the change event the panel
@@ -20,25 +21,29 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 
 import { PaneFrame } from "../../src/pane/pane.frame.tsx";
 import {
-  setSessionImportHook,
+  useSessionStore,
   type SessionImportState,
-  type SessionImportStore,
-} from "../../src/session/session.store-contract.ts";
+} from "../../src/session/session.store.ts";
 import { resetWallStore, settleAsyncWork } from "../fixtures/wall-store.ts";
 
 const PANE = "s1";
 const WAIT = { timeout: 2000 };
 
-let state: SessionImportState = { kind: "idle" };
 let importedTexts: string[] = [];
 
-function useFakeSessionImport(): SessionImportStore {
-  return {
-    state,
+/**
+ * Puts the singleton in a given state with an import that only records.
+ *
+ * Call before rendering: the row reads the store during its first render, and
+ * the real `importFromText` would reach the Tauri bridge.
+ */
+function stubSessionStore(state: SessionImportState): void {
+  useSessionStore.setState({
+    importState: state,
     importFromText: async (text) => {
       importedTexts.push(text);
     },
-  };
+  });
 }
 
 /** Makes `isNativeHost()` true; the pane renders as a webview, so `invoke` must land. */
@@ -72,16 +77,17 @@ function openPaneMenu(): void {
 }
 
 beforeEach(() => {
-  state = { kind: "idle" };
   importedTexts = [];
-  setSessionImportHook(useFakeSessionImport);
+  stubSessionStore({ kind: "idle" });
   resetWallStore(PANE);
 });
 
 afterEach(async () => {
   await settleAsyncWork();
   cleanup();
-  setSessionImportHook(null);
+  // Whole-state replace, so a field added to the store later is reset here
+  // without this file naming it — and the real bridge is back for the next file.
+  useSessionStore.setState(useSessionStore.getInitialState(), true);
   leaveNativeHost();
 });
 
@@ -94,7 +100,7 @@ describe("the cookie-import row in a browser", () => {
   });
 
   test("keeps saying so whatever the store reports, because nothing can run", () => {
-    state = { kind: "done", stored: 12, skipped: 0, failedDomains: [], at: 1 };
+    stubSessionStore({ kind: "done", stored: 12, skipped: 0, failedDomains: [], at: 1 });
     openPaneMenu();
 
     expect(control().disabled).toBe(true);
@@ -150,7 +156,7 @@ describe("the cookie-import row in the native shell", () => {
   });
 
   test("while importing it says so and cannot be started twice", () => {
-    state = { kind: "importing" };
+    stubSessionStore({ kind: "importing" });
     openPaneMenu();
 
     expect(statusText()).toBe("Importing cookies…");
@@ -158,33 +164,33 @@ describe("the cookie-import row in the native shell", () => {
   });
 
   test("a clean import reports the count, and pluralises one", () => {
-    state = { kind: "done", stored: 182, skipped: 0, failedDomains: [], at: 1 };
+    stubSessionStore({ kind: "done", stored: 182, skipped: 0, failedDomains: [], at: 1 });
     openPaneMenu();
 
     expect(statusText()).toBe("182 cookies imported.");
     cleanup();
 
-    state = { kind: "done", stored: 1, skipped: 0, failedDomains: [], at: 2 };
+    stubSessionStore({ kind: "done", stored: 1, skipped: 0, failedDomains: [], at: 2 });
     openPaneMenu();
 
     expect(statusText()).toBe("1 cookie imported.");
   });
 
   test("dropped rows are named, because a partial import must not look total", () => {
-    state = { kind: "done", stored: 182, skipped: 3, failedDomains: [], at: 1 };
+    stubSessionStore({ kind: "done", stored: 182, skipped: 3, failedDomains: [], at: 1 });
     openPaneMenu();
 
     expect(statusText()).toBe("182 cookies imported, 3 skipped.");
   });
 
   test("domains WebKit refused are listed, since those still need a manual login", () => {
-    state = {
+    stubSessionStore({
       kind: "done",
       stored: 40,
       skipped: 0,
       failedDomains: ["github.com", "grafana.internal"],
       at: 1,
-    };
+    });
     openPaneMenu();
 
     const text = statusText() ?? "";
@@ -203,7 +209,7 @@ describe("the cookie-import row in the native shell", () => {
     ];
 
     for (const [reason, expected] of cases) {
-      state = { kind: "error", reason };
+      stubSessionStore({ kind: "error", reason });
       openPaneMenu();
 
       const status = screen.getByTestId(`pane-import-cookies-status-${PANE}`);
