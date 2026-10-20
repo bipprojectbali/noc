@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened runtime entitlements. Unlike Info.plist, this file is not found by
+  name: `bundle.macOS.entitlements` in tauri.conf.json has to point at it.
+
+  Tauri enables hardened runtime by default (`hardened_runtime` defaults to
+  true in MacConfig). Under hardened runtime a process is cut off from the
+  camera and the microphone unless it is signed with these two entitlements,
+  whatever Info.plist says — the usage strings only decide what the prompt
+  reads, not whether the device may be reached.
+
+  Entitlements are applied at codesign time. An unsigned local build carries
+  none of them, so this file changes nothing until the app is signed.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.device.camera</key>
+	<true/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
+</plist>
