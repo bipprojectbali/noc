@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { isNativeHost } from "../native/native.bridge.ts";
 import { isPane, type PaneId } from "../layout/layout.types.ts";
+import { PaneCookieNotice } from "./pane.cookie-notice.tsx";
 import { INITIAL_PANE_LOAD_STATE, type PaneLoadState } from "./pane.load-state.ts";
 import { PaneMenu } from "./pane.menu.tsx";
 import { paneRendererFor } from "./pane.renderer.ts";
@@ -155,6 +156,16 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
           >
             Empty pane. Right-click here, or use ⋮, to give it a URL.
           </p>
+        )}
+
+        {/* Same boundary as the refusal below: a native webview is a top-level
+            document, so neither framing headers nor `SameSite` reach it. */}
+        {framingApplies && (load.kind === "loading" || load.kind === "ready") && (
+          <PaneCookieNotice
+            paneId={paneId}
+            decision={load.cookies}
+            nativeHost={nativeHost}
+          />
         )}
 
         {load.kind === "probing" && framingApplies && (

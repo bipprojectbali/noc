@@ -656,6 +656,17 @@ body.noc-no-pane-cursor .noc-pane-host {
   white-space: nowrap;
 }
 
+/* At the foot of the pane, not across it: see `pane.cookie-notice.tsx`. */
+.noc-pane__cookie-note {
+  align-self: end;
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #f4f6fa;
+  background: rgba(13, 15, 20, 0.88);
+  pointer-events: none;
+}
+
 .noc-pane__status {
   display: grid;
   place-items: center;
