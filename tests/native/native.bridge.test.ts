@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createNativeCookieBridge,
+  createNativePaneBridge,
   type CookieImportReport,
+  type NativeRect,
 } from "../../src/native/native.bridge.ts";
 import type { SessionCookie } from "../../src/session/session.types.ts";
 
@@ -39,6 +41,49 @@ function bridgeWith(
   });
   return { bridge, calls };
 }
+
+describe("the native pane bridge", () => {
+  const rect: NativeRect = { x: 0, y: 0, width: 100, height: 100 };
+
+  function paneBridgeWith() {
+    const calls: Call[] = [];
+    const bridge = createNativePaneBridge({
+      invoke: async (command, args) => {
+        calls.push({ command, args });
+      },
+    });
+    return { bridge, calls };
+  }
+
+  test("leaves `navigate` unset so the shell keeps the page it is showing", async () => {
+    const { bridge, calls } = paneBridgeWith();
+
+    await bridge.show("pane-1", "https://dash.internal/", rect);
+
+    // The shell treats a missing flag as "place only, if this is the address
+    // you are already on" — which is what keeps a wall reload from throwing
+    // away every pane's session. Sending `true` here would undo the fix.
+    expect(calls).toEqual([
+      {
+        command: "pane_webview_show",
+        args: {
+          paneId: "pane-1",
+          url: "https://dash.internal/",
+          rect,
+          navigate: undefined,
+        },
+      },
+    ]);
+  });
+
+  test("passes `navigate` through when the caller means to replace the page", async () => {
+    const { bridge, calls } = paneBridgeWith();
+
+    await bridge.show("pane-1", "https://dash.internal/", rect, true);
+
+    expect(calls[0]?.args["navigate"]).toBe(true);
+  });
+});
 
 describe("the native cookie bridge", () => {
   test("answers in a plain browser instead of throwing", async () => {

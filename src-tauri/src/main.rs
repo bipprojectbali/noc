@@ -18,6 +18,8 @@ fn main() {
         ])
         .setup(|app| {
             app.manage(sidecar::SidecarProcess::default());
+            // Outlives the wall page, which is the whole point of it.
+            app.manage(pane_webview::PaneNavigations::default());
             // The window is opened by the sidecar watcher, once the server has
             // announced the port it actually bound.
             sidecar::start(app.handle().clone())?;
