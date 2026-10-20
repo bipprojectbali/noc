@@ -3,7 +3,6 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 import { geometryRegistry } from "../geometry/geometry.store.ts";
 import { domRectReader, syncPaneGeometry } from "../geometry/geometry.sync.ts";
 import { LayoutRenderer } from "../layout/layout.renderer.tsx";
-import { PaneDock } from "../pane/pane.dock.tsx";
 import { PaneLayer } from "../pane/pane.layer.tsx";
 import { placePane } from "../pane/pane.renderer.ts";
 import { useWallStore } from "../pane/pane.store.ts";
@@ -15,8 +14,9 @@ import { useWallStore } from "../pane/pane.store.ts";
  * and never changes order. Geometry is copied from slots to panes imperatively
  * after every commit, so moving a pane never involves React.
  *
- * The dock strip is a sibling below the shell, not inside it: the shell is the
- * box panes are placed into, and a native webview paints over everything in it.
+ * The shell is the whole wall. It used to be wrapped in a column that reserved
+ * room under it for the dock strip; with minimise gone there is nothing left to
+ * reserve room for, and a wrapper that holds one child is a box to look past.
  */
 export function AppShell() {
   const tree = useWallStore((state) => state.tree);
@@ -45,14 +45,11 @@ export function AppShell() {
   }, [tree]);
 
   return (
-    <div className="noc-wall">
-      <main className="noc-shell" ref={containerRef}>
-        <div className="noc-layout">
-          <LayoutRenderer tree={tree} />
-        </div>
-        <PaneLayer />
-      </main>
-      <PaneDock />
-    </div>
+    <main className="noc-shell" ref={containerRef}>
+      <div className="noc-layout">
+        <LayoutRenderer tree={tree} />
+      </div>
+      <PaneLayer />
+    </main>
   );
 }
