@@ -1,0 +1,149 @@
+/* Layer 1 of 3, imported first by `app.css`. Everything the rest of the wall
+   reads before it can draw anything: the `:root` custom properties, the reset,
+   the document rules that stop the wall from scrolling or bouncing, the notice
+   strip, and the layout tree itself — shell, splits, empty slots, splitters.
+   It is first because of the custom properties: every colour and the splitter
+   size are defined here and consumed in the two layers below, so this file can
+   never be moved after them. The `body.noc-resizing` pair closes the file
+   rather than opening `app.drag.css` because that is where it sits in the
+   cascade: it is the splitter drag's iframe arm, and splitters live here. */
+
+:root {
+  --noc-bg: #0f1115;
+  --noc-chrome: #171a21;
+  --noc-border: #2a2f3a;
+  --noc-text: #d7dce5;
+  --noc-muted: #8b93a3;
+  --noc-danger: #ff7b72;
+  --noc-splitter-size: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* The wall is a fixed grid of viewports, never a document — nothing outside a
+   pane may scroll or bounce. A wheel an iframe pane cannot absorb (its page
+   fits the pane, or it already reached the end) chains out to this document,
+   and macOS answers it on the wall itself: `overscroll-behavior: none` removes
+   that elastic bounce, `overflow: hidden` removes any real scroll it could
+   find. Both matter because panes are placed in viewport coordinates by
+   `geometry.sync`, which has no scroll listener — a document that moves drags
+   every pane off its slot, which reads as "the whole page scrolls, the pane
+   does not". A native webview pane is a separate top-level document and never
+   chains here, so this governs the iframe renderer only. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  background: var(--noc-bg);
+  color: var(--noc-text);
+  font: 13px/1.4 system-ui, sans-serif;
+}
+
+/* The column holds the optional persistence notice above the wall. The wall
+   takes whatever height the notice leaves. */
+.noc-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.noc-notice {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--noc-chrome);
+  border-bottom: 1px solid var(--noc-border);
+  color: var(--noc-muted);
+}
+
+.noc-notice--error {
+  color: var(--noc-danger);
+}
+
+/* Shared coordinate space for both layers, and the whole wall: it is a direct
+   child of `.noc-root`, taking whatever height the persistence notice leaves.
+   Pane hosts are positioned against this box, so it must be the containing
+   block. */
+.noc-shell {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Layout layer: the tree, drawn as empty slots. Free to be rebuilt. */
+.noc-layout {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+
+.noc-split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.noc-split--row {
+  flex-direction: row;
+}
+
+.noc-split--column {
+  flex-direction: column;
+}
+
+.noc-split__child {
+  display: flex;
+  flex-basis: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.noc-slot {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The splitter is a flex item between the two children, never an overlay over a
+   pane: a native webview ignores CSS clipping, so anything drawn on top of a
+   pane would be invisible once the webview renderer lands. */
+.noc-splitter {
+  flex: 0 0 var(--noc-splitter-size);
+  background: var(--noc-border);
+  /* Without this a touch drag scrolls the page instead of moving the splitter. */
+  touch-action: none;
+}
+
+.noc-splitter:hover {
+  background: var(--noc-muted);
+}
+
+.noc-splitter--row {
+  cursor: col-resize;
+}
+
+.noc-splitter--column {
+  cursor: row-resize;
+}
+
+/* Set while a drag is in progress. See `resize.pointer-capture.ts`: this class
+   is the iframe implementation of "no pane may take the cursor right now", and
+   it is applied directly to <body> so that quieting the frames never re-renders
+   them. It does nothing for a native webview, which is not in the DOM. */
+body.noc-resizing {
+  user-select: none;
+}
+
+body.noc-resizing .noc-pane__frame {
+  pointer-events: none;
+}
