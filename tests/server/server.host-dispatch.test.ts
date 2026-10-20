@@ -12,6 +12,8 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createHostDispatch,
+  stayOnHostUrl,
+  STAY_ON_HOST_PARAM,
   WALL_SHELL_PATH,
 } from "../../src/server/server.host-dispatch.ts";
 import { createProxySiteRegistry } from "../../src/proxy/proxy.registry.ts";
@@ -73,6 +75,10 @@ describe("wall routes on a site host", () => {
   });
 
   test("so does a plain loopback host, which is how Tauri reaches it", async () => {
+    // Also the proof that the wall-host redirect cannot reach an API call: it
+    // lives in the catch-all, and a route is matched before the catch-all. A
+    // 307 here would turn the layout's PUT into a second request to a host the
+    // client never asked for.
     const { dispatch, proxied } = dispatchFor();
     const handler = dispatch.wallOnly(() => new Response("the wall's own answer"));
 
@@ -103,6 +109,40 @@ describe("the catch-all", () => {
     expect(await response.text()).toBe("proxied");
     expect(proxied).toEqual([`${label} /`]);
     expect(shellRequests).toEqual([]);
+  });
+
+  test("a browser on the loopback host is sent where panes can hold a session", async () => {
+    const { dispatch, shellRequests } = dispatchFor();
+    for (const origin of ["http://localhost:7788", "http://127.0.0.1:7788"]) {
+      const response = await dispatch.catchAll(new Request(`${origin}/`), noUpgrade);
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe("http://wall.noc.localhost:7788/");
+    }
+    // Not served here and then moved: the wall document is never even built.
+    expect(shellRequests).toEqual([]);
+  });
+
+  test("the move keeps the path and query, so a saved view survives it", async () => {
+    const { dispatch } = dispatchFor();
+    const response = await dispatch.catchAll(
+      new Request("http://localhost:7788/view/abc?pane=2"),
+      noUpgrade,
+    );
+    expect(response.headers.get("location")).toBe(
+      "http://wall.noc.localhost:7788/view/abc?pane=2",
+    );
+  });
+
+  test("the address the ready line announces stays put, which is how the shell is spared", async () => {
+    // The shell opens the ready-line URL verbatim, and the server writes that
+    // line — so this, not a user-agent string, is what tells the two apart.
+    const announced = stayOnHostUrl("http://127.0.0.1:7788/");
+    expect(new URL(announced).searchParams.has(STAY_ON_HOST_PARAM)).toBe(true);
+
+    const { dispatch, shellRequests } = dispatchFor();
+    const response = await dispatch.catchAll(new Request(announced), noUpgrade);
+    expect(await response.text()).toContain("wall");
+    expect(shellRequests).toEqual([`http://127.0.0.1:7788${WALL_SHELL_PATH}`]);
   });
 
   test("a label nobody registered is refused by the proxy, not served the wall", async () => {

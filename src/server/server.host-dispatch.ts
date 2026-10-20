@@ -21,7 +21,7 @@
  *    not. Its cost is one loopback request per wall page load.
  */
 
-import { siteLabelOf } from "../proxy/proxy.label.ts";
+import { siteLabelOf, wallLandingHostname } from "../proxy/proxy.label.ts";
 import type { ProxySiteRegistry } from "../proxy/proxy.registry.ts";
 import { upgradeProxySocket, type ProxySocketData } from "../proxy/proxy.socket.ts";
 
@@ -31,6 +31,28 @@ import { upgradeProxySocket, type ProxySocketData } from "../proxy/proxy.socket.
  * other, so the name cannot shadow anything of the site's.
  */
 export const WALL_SHELL_PATH = "/__noc-shell";
+
+/**
+ * The one mark on a wall URL that means "answer me on this host, do not move
+ * me". Structural, not a user-agent sniff: a browser's address is typed by a
+ * human and will never carry this, while the native shell's address is
+ * *configured* by this server — Rust parses `noc-ready <url>` off stdout and
+ * opens that URL verbatim (invariant 4), so what the shell asks for is decided
+ * here, in `server.entry.ts`, by `stayOnHostUrl`. It survives a reload because
+ * it lives in the address, and it costs `src-tauri/` nothing.
+ *
+ * A plain flag rather than a secret on purpose: the second thing that needs it
+ * is the repo's own cross-site control run (`cookie.demo-page.ts`), where a
+ * human wants the `127.0.0.1` wall precisely because sessions break there.
+ */
+export const STAY_ON_HOST_PARAM = "stay";
+
+/** The address to announce on the ready line: this host, kept. */
+export function stayOnHostUrl(href: string): string {
+  const url = new URL(href);
+  url.searchParams.set(STAY_ON_HOST_PARAM, "1");
+  return url.href;
+}
 
 export interface HostDispatchDeps {
   readonly registry: ProxySiteRegistry;
@@ -64,6 +86,29 @@ export function createHostDispatch(deps: HostDispatchDeps) {
     });
   };
 
+  /**
+   * The wall's two addresses are the same wall — the layout is in SQLite, not
+   * in the browser — but only one of them makes a pane same-site, so a browser
+   * that arrived on the other is sent to the one that works instead of being
+   * told to go there itself. 307 because it is the method- and body-preserving
+   * one; nothing but the wall document reaches here, but a redirect that
+   * quietly turned a request into a GET would be a trap for the next route.
+   *
+   * Nothing else can be caught: `/api/*` and the shell path are explicit Bun
+   * routes, which win over this catch-all, and a site host never reaches this
+   * branch at all.
+   */
+  const landElsewhere = (url: URL): Response | null => {
+    if (url.searchParams.has(STAY_ON_HOST_PARAM)) return null;
+    const landing = wallLandingHostname(url.hostname);
+    if (landing === null) return null;
+    const authority = url.port === "" ? landing : `${landing}:${url.port}`;
+    return Response.redirect(
+      `${url.protocol}//${authority}${url.pathname}${url.search}`,
+      307,
+    );
+  };
+
   return {
     /** Wraps a wall route so a proxied site keeps its own path of that name. */
     wallOnly<R extends Request>(
@@ -82,7 +127,9 @@ export function createHostDispatch(deps: HostDispatchDeps) {
       server: Bun.Server<ProxySocketData>,
     ): Promise<Response> {
       const label = labelFor(request);
-      if (label === null) return wallDocument(request);
+      if (label === null) {
+        return landElsewhere(new URL(request.url)) ?? wallDocument(request);
+      }
       if (upgradeProxySocket(request, server, label, deps.registry)) {
         // Bun wants nothing back once the socket is upgraded; its types insist.
         return undefined as unknown as Response;

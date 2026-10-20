@@ -2,14 +2,42 @@ import { describe, expect, test } from "bun:test";
 
 import {
   SITE_LABEL_PREFIX,
+  WALL_PROXY_HOSTNAME,
   proxySiteUrl,
   siteLabel,
   siteLabelOf,
   siteOriginOf,
+  wallLandingHostname,
   wallProxyBase,
 } from "../../src/proxy/proxy.label.ts";
 
 const WALL = { protocol: "http:", hostname: "wall.noc.localhost", port: "7788" };
+
+describe("wallLandingHostname", () => {
+  test("moves every name that can only mean this machine", () => {
+    for (const hostname of ["localhost", "LOCALHOST", "127.0.0.1", "127.0.0.2", "::1", "[::1]"]) {
+      expect(wallLandingHostname(hostname)).toBe(WALL_PROXY_HOSTNAME);
+    }
+  });
+
+  test("leaves the wall host alone, which is what rules out a loop", () => {
+    expect(wallLandingHostname(WALL_PROXY_HOSTNAME)).toBeNull();
+    // The target of every move, fed back in, must decline to move again.
+    expect(wallLandingHostname(wallLandingHostname("localhost") ?? "")).toBeNull();
+  });
+
+  test("leaves a proxied site host alone", () => {
+    const label = siteLabel("https://grafana.internal");
+    expect(wallLandingHostname(`${label}.noc.localhost`)).toBeNull();
+  });
+
+  test("leaves a routable address alone, where the move would point at the viewer", () => {
+    // A wall bound to 0.0.0.0 is reached across the network; sending that
+    // browser to *.localhost would send it to its own machine.
+    expect(wallLandingHostname("192.168.1.5")).toBeNull();
+    expect(wallLandingHostname("noc.example.com")).toBeNull();
+  });
+});
 
 describe("siteOriginOf", () => {
   test("canonicalises so one site cannot end up with two labels", () => {

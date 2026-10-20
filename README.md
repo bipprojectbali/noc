@@ -105,15 +105,17 @@ bun install
 bun run dev          # http://127.0.0.1:7788
 ```
 
-Open the wall at **`http://wall.noc.localhost:7788/`**, not at `127.0.0.1`.
-Both addresses reach the same server, but only the first lets a framed site
-keep you signed in: panes are served through sibling addresses of that name,
-which is what stops the browser treating them as a different site and
-withholding their session cookies. No `/etc/hosts` entry is needed — Chrome
-resolves any `*.localhost` name to loopback on its own. A wall opened at
-`127.0.0.1` still works and says so in the corner; the desktop app loads the
-loopback address and does not need any of this, because its panes are real
-windows.
+Open `http://localhost:7788/` and the browser is taken on to
+**`http://wall.noc.localhost:7788/`**. Both addresses reach the same server
+and the same wall — the layout is in the database — but only the second lets
+a framed site keep you signed in: panes are served through sibling addresses
+of that name, which is what stops the browser treating them as a different
+site and withholding their session cookies. No `/etc/hosts` entry is needed —
+Chrome resolves any `*.localhost` name to loopback on its own. Add `?stay=1`
+to stay on the loopback address on purpose (sessions in panes will break
+there, which is the point of having it). A wall bound to a routable address
+is never moved, and the desktop app loads the loopback address and does not
+need any of this, because its panes are real windows.
 
 | Script | Does |
 | --- | --- |

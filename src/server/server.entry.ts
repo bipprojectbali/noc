@@ -19,7 +19,11 @@ import {
   handleCookieDemoSet,
 } from "./cookie.demo.ts";
 import { PANE_CHROME_PATH, handlePaneChrome } from "./server.chrome-page.ts";
-import { WALL_SHELL_PATH, createHostDispatch } from "./server.host-dispatch.ts";
+import {
+  WALL_SHELL_PATH,
+  createHostDispatch,
+  stayOnHostUrl,
+} from "./server.host-dispatch.ts";
 import { watchParentProcess } from "./server.parent-watch.ts";
 import { readyLine } from "./server.ready.ts";
 import {
@@ -107,17 +111,19 @@ try {
 }
 
 console.info(`NOC wall listening on ${server.url.href}`);
-// Both names reach this same socket. The loopback address is what the native
-// shell loads and what the ready line below announces; the proxy host is the
-// one where a framed site can keep its login session, because only there are
-// the panes same-site with the wall. See `src/proxy/proxy.label.ts`.
+// Both names reach this same socket, and a browser arriving on the loopback one
+// is redirected to the proxy host, because only there are the panes same-site
+// with the wall. Printed so the address bar's own change is not a surprise.
+// See `src/proxy/proxy.label.ts`.
 console.info(
-  `In a browser, open http://${WALL_PROXY_HOSTNAME}:${server.port}/ ` +
+  `A browser is sent on to http://${WALL_PROXY_HOSTNAME}:${server.port}/ ` +
     `so panes can hold a session.`,
 );
 // Machine-readable, and only after the socket is bound: whoever spawned this
-// process may be waiting on it to learn the ephemeral port.
-console.info(readyLine(server.url.href));
+// process may be waiting on it to learn the ephemeral port. Marked to stay put
+// — the native shell is the one client that must not be redirected, and this is
+// the channel by which the server, not a string match, tells it apart.
+console.info(readyLine(stayOnHostUrl(server.url.href)));
 
 if (config.parentPid !== null) {
   watchParentProcess({
