@@ -6,6 +6,14 @@
 
 import index from "../../index.html";
 import { readConfig } from "../config/config.env.ts";
+import {
+  COOKIE_DEMO_PAGE_PATH,
+  COOKIE_DEMO_READ_PATH,
+  COOKIE_DEMO_SET_PATH,
+  handleCookieDemoPage,
+  handleCookieDemoRead,
+  handleCookieDemoSet,
+} from "./cookie.demo.ts";
 import { watchParentProcess } from "./server.parent-watch.ts";
 import { readyLine } from "./server.ready.ts";
 import {
@@ -46,6 +54,11 @@ try {
     routes: {
       [EMBEDDABILITY_PATH]: handleEmbeddability,
       [SELF_TEST_PATH]: handleSelfTest,
+      // Framable on purpose: the demo only says anything when the wall frames
+      // it from the other loopback host. See `cookie.demo-page.ts`.
+      [COOKIE_DEMO_PAGE_PATH]: handleCookieDemoPage,
+      [COOKIE_DEMO_SET_PATH]: handleCookieDemoSet,
+      [COOKIE_DEMO_READ_PATH]: handleCookieDemoRead,
       [WALL_PATH]: { GET: wall.getWall, PUT: wall.putWall },
       [WALL_VIEWS_PATH]: { GET: wall.listViews },
       [WALL_VIEW_PATH]: {
