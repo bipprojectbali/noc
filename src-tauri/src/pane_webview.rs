@@ -27,6 +27,9 @@
 //! Not done here: nobody has yet seen whether WKWebView renders that prompt in
 //! a child webview, and guessing wrong turns a silent grant into a silent deny.
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+
 use serde::Deserialize;
 use tauri::webview::WebviewBuilder;
 use tauri::{
@@ -37,6 +40,50 @@ use tauri::{
 use crate::sidecar::WALL_WINDOW_LABEL;
 
 const PANE_LABEL_PREFIX: &str = "pane-";
+
+/// The address each pane's webview was last sent to.
+///
+/// This has to live in the shell rather than in the page, because the two have
+/// different lifetimes: the wall page's JavaScript forgets every pane it has
+/// opened each time that page reloads, while the child webviews it created go on
+/// living — they are children of the window, not of the page.
+///
+/// Without this map the first `pane_webview_show` after a wall reload navigates
+/// every pane back to the address the layout holds, throwing away wherever the
+/// user had browsed to inside it. A user who had just logged in watches the pane
+/// return to the login page, which is indistinguishable from a session that was
+/// never kept. Remembering the last address makes a repeat `show` for the same
+/// one a no-op, so only a real change of address — or an explicit request —
+/// replaces the page.
+#[derive(Default)]
+pub struct PaneNavigations(Mutex<HashMap<String, String>>);
+
+impl PaneNavigations {
+    /// True when this pane's webview has already been sent to `url`.
+    ///
+    /// A lock we cannot take answers "no", which navigates: losing an address
+    /// the user asked for is a visible break, where a redundant navigation is
+    /// the behaviour this shell had all along.
+    fn is_current(&self, label: &str, url: &str) -> bool {
+        match self.0.lock() {
+            Ok(map) => map.get(label).is_some_and(|last| last == url),
+            Err(_) => false,
+        }
+    }
+
+    fn remember(&self, label: &str, url: &str) {
+        if let Ok(mut map) = self.0.lock() {
+            map.insert(label.to_string(), url.to_string());
+        }
+    }
+
+    /// The webview is gone, so the next `show` for this label has to open one.
+    fn forget(&self, label: &str) {
+        if let Ok(mut map) = self.0.lock() {
+            map.remove(label);
+        }
+    }
+}
 
 /// Logical pixels, relative to the wall window's content area — which is what
 /// the web layer's `getBoundingClientRect` already reports.
@@ -133,25 +180,37 @@ fn parse_url(pane_id: &str, url: &str) -> Result<tauri::Url, String> {
         .map_err(|error| format!("Pane {pane_id} was given \"{url}\": {error}"))
 }
 
-/// Creates the pane's webview at `rect`, or navigates the existing one.
+/// Creates the pane's webview at `rect`, or places the existing one.
 ///
 /// The caller only sends this when the pane's own URL changes, never on a
 /// geometry change: navigating on every move would reload the page, and would
 /// also undo wherever the user had browsed to inside the pane.
+///
+/// `navigate` is how the caller says it means to replace the page — the reload
+/// button, or a URL the user typed. Left unset, an existing webview that is
+/// already at `url` is only placed, never navigated, because the caller cannot
+/// tell a first call from a repeat one: the page that tracks which panes it has
+/// opened is itself reloadable, and a reload of it would otherwise send every
+/// pane back to the address the layout holds. See `PaneNavigations`.
 #[tauri::command]
 pub fn pane_webview_show(
     app: AppHandle,
     pane_id: String,
     url: String,
     rect: PaneRect,
+    navigate: Option<bool>,
 ) -> Result<(), String> {
     let label = pane_label(&pane_id)?;
     let target = parse_url(&pane_id, &url)?;
+    let history = app.state::<PaneNavigations>();
 
     if let Some(webview) = pane_webview(&app, &label) {
-        webview
-            .navigate(target)
-            .map_err(|error| format!("Pane {pane_id} could not navigate: {error}"))?;
+        if navigate == Some(true) || !history.is_current(&label, &url) {
+            webview
+                .navigate(target)
+                .map_err(|error| format!("Pane {pane_id} could not navigate: {error}"))?;
+            history.remember(&label, &url);
+        }
         return place(&webview, &pane_id, rect, true);
     }
 
@@ -164,6 +223,7 @@ pub fn pane_webview_show(
             rect.size(),
         )
         .map_err(|error| format!("Pane {pane_id} could not get a webview: {error}"))?;
+    history.remember(&label, &url);
     Ok(())
 }
 
@@ -190,6 +250,9 @@ pub fn pane_webview_place(
 #[tauri::command]
 pub fn pane_webview_close(app: AppHandle, pane_id: String) -> Result<(), String> {
     let label = pane_label(&pane_id)?;
+    // Dropped before the webview is, so a pane id that comes back around (a
+    // close that raced a create) cannot inherit the old address as "current".
+    app.state::<PaneNavigations>().forget(&label);
     let Some(webview) = pane_webview(&app, &label) else {
         return Ok(());
     };
