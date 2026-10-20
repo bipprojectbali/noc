@@ -24,15 +24,11 @@ import { activePaneUrl } from "../layout/layout.sites.ts";
 import { isPane, type PaneId } from "../layout/layout.types.ts";
 import { usePaneDragStore } from "./pane.drag.ts";
 import { useWallStore } from "./pane.store.ts";
+import { urlHostLabel } from "./pane.url.ts";
 
 /** The pane's host, or a word for a pane that has no address yet. */
 function paneLabel(url: string | null): string {
-  if (url === null) return "Empty pane";
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
+  return url === null ? "Empty pane" : urlHostLabel(url);
 }
 
 export function PaneDropOverlay({ paneId }: { paneId: PaneId }) {

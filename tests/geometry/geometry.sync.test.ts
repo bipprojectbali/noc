@@ -281,8 +281,11 @@ describe("sync into the webview renderer", () => {
     for (const paneId of ["p1", "p2"]) {
       const anchor = document.createElement("div");
       hosts.get(paneId)!.appendChild(anchor);
+      // One site per pane, labelled with the pane's own id. The anchor comes
+      // first: a site has to be known before it can be given a url, which is
+      // the same order React mounts them in (ref, then layout effect).
+      renderer.registerAnchor(paneId, paneId, anchor);
       renderer.setUrl(paneId, `https://${paneId}.example`);
-      renderer.registerAnchor(paneId, anchor);
     }
 
     const before = {

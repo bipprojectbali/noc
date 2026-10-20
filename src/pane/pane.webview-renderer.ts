@@ -17,11 +17,19 @@
  * - Hiding is not destroying. `visible: false` keeps the page running; creating
  *   the webview again would reload it, which is exactly what the wall's design
  *   exists to prevent.
+ *
+ * One pane holds several sites, so the map below is keyed by site id and each
+ * entry remembers which pane it belongs to. A site id is the webview's label in
+ * the shell — which is why `layout.types` restricts the alphabet to what Rust's
+ * `pane_label` accepts. The geometry layer still speaks in panes: `place` sets
+ * the rect for every site of a pane at once and only the active one is shown,
+ * because all of a pane's anchors occupy the same grid cell and therefore the
+ * same rect. Switching sites is a visibility change and nothing else.
  */
 
 import { createElement, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
-import type { PaneId } from "../layout/layout.types.ts";
+import type { PaneId, SiteId } from "../layout/layout.types.ts";
 import {
   nativePaneBridge,
   type NativePaneBridge,
@@ -31,7 +39,11 @@ import {
   registerPanePointerSuppressor,
   type PanePointerSuppressor,
 } from "../resize/resize.pointer-capture.ts";
-import type { PaneContentProps, PaneRenderer } from "./pane.renderer.ts";
+import {
+  paneContentTestId,
+  type PaneContentProps,
+  type PaneRenderer,
+} from "./pane.renderer.ts";
 
 export type AnchorRectReader = (element: HTMLElement) => NativeRect;
 
@@ -51,30 +63,44 @@ export const domAnchorRect: AnchorRectReader = (element) => {
 };
 
 type PaneEntry = {
+  /** The pane this site belongs to. `place` is still addressed by pane. */
+  paneId: PaneId;
   anchor: HTMLElement | null;
   /** The url last handed to the shell. A move must never re-navigate. */
   url: string | null;
-  /** Whether a webview exists for this pane yet. */
+  /** Whether a webview exists for this site yet. */
   opened: boolean;
   /** What the layout last asked for, independent of a drag. */
   visible: boolean;
+  /** Whether this is the site its pane is showing. Siblings stay loaded. */
+  active: boolean;
   /** What was last actually sent, so a drag does not flood the IPC channel. */
   sent: { rect: NativeRect; visible: boolean } | null;
 };
 
 export type PaneWebviewRenderer = PaneRenderer & {
-  /** The anchor box whose rect the webview is placed over. */
-  registerAnchor: (paneId: PaneId, element: HTMLElement | null) => void;
-  setUrl: (paneId: PaneId, url: string | null) => void;
   /**
-   * Navigates the pane to the address it already has. An iframe gets this for
+   * The anchor box whose rect the webview is placed over, and the pane the site
+   * belongs to — this is where the site learns its pane, so it must be called
+   * before anything addressed by pane can reach the site.
+   */
+  registerAnchor: (
+    paneId: PaneId,
+    siteId: SiteId,
+    element: HTMLElement | null,
+  ) => void;
+  setUrl: (siteId: SiteId, url: string | null) => void;
+  /** Whether this site is the one its pane shows. */
+  setActive: (siteId: SiteId, active: boolean) => void;
+  /**
+   * Navigates the site to the address it already has. An iframe gets this for
    * nothing — `probing` drops its `src` and putting it back fetches again — so
    * only this renderer has to be asked, and it is deliberately not on the
    * shared `PaneRenderer`.
    */
-  reopen: (paneId: PaneId) => void;
+  reopen: (siteId: SiteId) => void;
   /** Re-sends geometry at the visibility the layout last asked for. */
-  remeasure: (paneId: PaneId) => void;
+  remeasure: (siteId: SiteId) => void;
 };
 
 export type PaneWebviewDeps = {
@@ -102,33 +128,40 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
     onError = (message) => console.error(message),
   } = deps;
 
-  const panes = new Map<PaneId, PaneEntry>();
+  const sites = new Map<SiteId, PaneEntry>();
   /** False for the duration of a drag. See `setCursorCapture`. */
   let capturing = true;
 
-  function entryFor(paneId: PaneId): PaneEntry {
-    const existing = panes.get(paneId);
+  function entryFor(siteId: SiteId, paneId: PaneId): PaneEntry {
+    const existing = sites.get(siteId);
     if (existing !== undefined) return existing;
     const created: PaneEntry = {
+      paneId,
       anchor: null,
       url: null,
       opened: false,
       visible: false,
+      // A pane that holds one site never says so; only a background site is
+      // ever told, and it is told before it is given a url to open.
+      active: true,
       sent: null,
     };
-    panes.set(paneId, created);
+    sites.set(siteId, created);
     return created;
   }
 
-  function report(paneId: PaneId, what: string, error: unknown): void {
-    onError(`Pane ${paneId} could not ${what}: ${describe(error)}`);
+  function report(siteId: SiteId, what: string, error: unknown): void {
+    onError(`Pane site ${siteId} could not ${what}: ${describe(error)}`);
   }
 
   /** Pushes the anchor's current rect, unless nothing has changed. */
-  function send(paneId: PaneId, entry: PaneEntry): void {
+  function send(siteId: SiteId, entry: PaneEntry): void {
     if (entry.anchor === null || !entry.opened) return;
     const rect = readRect(entry.anchor);
-    const visible = entry.visible && capturing && hasArea(rect);
+    // Every site of a pane is placed at the same rect — they share one grid
+    // cell — so being the active one is the whole difference between the page
+    // on screen and the pages kept warm behind it.
+    const visible = entry.visible && entry.active && capturing && hasArea(rect);
     if (
       entry.sent !== null &&
       entry.sent.visible === visible &&
@@ -137,115 +170,145 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
       return;
     }
     entry.sent = { rect, visible };
-    bridge.place(paneId, rect, visible).catch((error: unknown) => {
-      report(paneId, "be placed", error);
+    bridge.place(siteId, rect, visible).catch((error: unknown) => {
+      report(siteId, "be placed", error);
     });
   }
 
-  /** Creates the webview, or navigates it if the pane already had one. */
-  function open(paneId: PaneId, entry: PaneEntry, url: string): void {
+  /** Creates the webview, or navigates it if the site already had one. */
+  function open(siteId: SiteId, entry: PaneEntry, url: string): void {
     const anchor = entry.anchor;
     if (anchor === null) return;
     const rect = readRect(anchor);
     entry.opened = true;
     // The shell shows a freshly created webview, so record that as sent and let
-    // the follow-up correct it for a pane that is docked or off screen.
+    // the follow-up correct it for a site that is docked, off screen or behind
+    // one of its siblings.
     entry.sent = { rect, visible: true };
     bridge
-      .show(paneId, url, rect)
-      .then(() => send(paneId, entry))
+      .show(siteId, url, rect)
+      .then(() => send(siteId, entry))
       .catch((error: unknown) => {
         entry.sent = null;
-        report(paneId, "open", error);
+        report(siteId, "open", error);
       });
+  }
+
+  function close(siteId: SiteId, entry: PaneEntry): void {
+    sites.delete(siteId);
+    if (!entry.opened) return;
+    bridge.close(siteId).catch((error: unknown) => {
+      report(siteId, "be closed", error);
+    });
   }
 
   const renderer: PaneWebviewRenderer = {
     kind: "webview",
 
-    Content: ({ paneId, url }: PaneContentProps) => {
+    Content: ({ paneId, siteId, url, active }: PaneContentProps) => {
       const anchorRef = useRef<HTMLDivElement | null>(null);
 
       const attach = useCallback((element: HTMLDivElement | null) => {
         anchorRef.current = element;
-        renderer.registerAnchor(paneId, element);
-      }, [paneId]);
+        renderer.registerAnchor(paneId, siteId, element);
+      }, [paneId, siteId]);
 
+      // Active first: `setUrl` is what creates the webview, and a background
+      // site must already be known to be one before it exists.
       useLayoutEffect(() => {
-        renderer.setUrl(paneId, url);
-      }, [paneId, url]);
+        renderer.setActive(siteId, active);
+        renderer.setUrl(siteId, url);
+      }, [siteId, url, active]);
 
       useEffect(() => {
         const element = anchorRef.current;
         if (element === null || typeof ResizeObserver === "undefined") return;
         // Showing or hiding the URL bar resizes this box without moving the
         // pane, and the layout layer has no reason to notice that.
-        const observer = new ResizeObserver(() => renderer.remeasure(paneId));
+        const observer = new ResizeObserver(() => renderer.remeasure(siteId));
         observer.observe(element);
         return () => observer.disconnect();
-      }, [paneId]);
+      }, [siteId]);
 
       return createElement("div", {
         className: "noc-pane__webview-anchor",
         ref: attach,
-        "data-testid": `pane-webview-${paneId}`,
+        "data-site-id": siteId,
+        "data-testid": paneContentTestId("pane-webview", paneId, siteId, active),
       });
     },
 
-    registerAnchor: (paneId, element) => {
-      const entry = entryFor(paneId);
+    registerAnchor: (paneId, siteId, element) => {
+      const entry = entryFor(siteId, paneId);
+      entry.paneId = paneId;
       entry.anchor = element;
       if (element === null) return;
       // A remount gives us a new box; nothing sent before applies to it.
       entry.sent = null;
       if (entry.url !== null && !entry.opened) {
-        open(paneId, entry, entry.url);
+        open(siteId, entry, entry.url);
         return;
       }
-      send(paneId, entry);
+      send(siteId, entry);
     },
 
-    setUrl: (paneId, url) => {
-      const entry = entryFor(paneId);
-      if (entry.url === url) return;
+    setUrl: (siteId, url) => {
+      const entry = sites.get(siteId);
+      if (entry === undefined || entry.url === url) return;
       entry.url = url;
 
       if (url === null) {
         // Cleared, not deleted: hide and keep the page for the next address.
         entry.visible = false;
-        send(paneId, entry);
+        send(siteId, entry);
         return;
       }
-      open(paneId, entry, url);
+      open(siteId, entry, url);
     },
 
-    reopen: (paneId) => {
-      const entry = panes.get(paneId);
+    setActive: (siteId, active) => {
+      const entry = sites.get(siteId);
+      if (entry === undefined || entry.active === active) return;
+      entry.active = active;
+      // Visibility only. Closing the webview of the site being left would
+      // reload it on the way back, which is the one thing this wall exists to
+      // avoid; `pane_webview_close` has two callers and this is not a third.
+      send(siteId, entry);
+    },
+
+    reopen: (siteId) => {
+      const entry = sites.get(siteId);
       if (entry === undefined || entry.url === null) return;
       // `show` navigates a webview that already exists, so the page is fetched
       // again without the view being destroyed — which would lose all it holds.
-      open(paneId, entry, entry.url);
+      open(siteId, entry, entry.url);
     },
 
     place: (paneId, visible) => {
-      const entry = entryFor(paneId);
-      entry.visible = visible;
-      send(paneId, entry);
+      // Addressed by pane: every site of it shares the one rect the geometry
+      // layer knows about, and only the active one is shown.
+      for (const [siteId, entry] of sites) {
+        if (entry.paneId !== paneId) continue;
+        entry.visible = visible;
+        send(siteId, entry);
+      }
     },
 
-    remeasure: (paneId) => {
-      const entry = panes.get(paneId);
+    remeasure: (siteId) => {
+      const entry = sites.get(siteId);
       if (entry === undefined) return;
-      send(paneId, entry);
+      send(siteId, entry);
     },
 
     release: (paneId) => {
-      const entry = panes.get(paneId);
-      panes.delete(paneId);
-      if (entry === undefined || !entry.opened) return;
-      bridge.close(paneId).catch((error: unknown) => {
-        report(paneId, "be closed", error);
-      });
+      for (const [siteId, entry] of [...sites]) {
+        if (entry.paneId === paneId) close(siteId, entry);
+      }
+    },
+
+    releaseSite: (siteId) => {
+      const entry = sites.get(siteId);
+      if (entry !== undefined) close(siteId, entry);
     },
 
     /**
@@ -256,7 +319,7 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
     setCursorCapture: (capturingNow) => {
       if (capturing === capturingNow) return;
       capturing = capturingNow;
-      for (const [paneId, entry] of panes) send(paneId, entry);
+      for (const [siteId, entry] of sites) send(siteId, entry);
     },
   };
 

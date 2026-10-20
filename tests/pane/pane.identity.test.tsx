@@ -7,7 +7,7 @@ import { geometryRegistry } from "../../src/geometry/geometry.store.ts";
 import type { SplitNode } from "../../src/layout/layout.types.ts";
 import { useWallStore } from "../../src/pane/pane.store.ts";
 import { stubRect } from "../fixtures/dom-rect.ts";
-import { resetWallStore, settleAsyncWork } from "../fixtures/wall-store.ts";
+import { resetWallStore, settleAsyncWork, siteIdsOf } from "../fixtures/wall-store.ts";
 
 const ROOT = "root";
 const realFetch = globalThis.fetch;
@@ -185,7 +185,10 @@ describe("constraint 1: a pane's iframe survives every layout change", () => {
     });
     const sibling = treePaneIds().find((id) => id !== ROOT)!;
     await loadUrl(sibling, "https://example.com");
-    expect(useWallStore.getState().load[sibling]).toBeDefined();
+    // Load state belongs to the page, not to the pane that shows it, so the
+    // pane's one site is what has an entry here.
+    const site = siteIdsOf(sibling)[0]!;
+    expect(useWallStore.getState().load[site]).toBeDefined();
     // The rect the sync last placed the host at. happy-dom measures every
     // element as zero, so it is written here rather than read off the DOM.
     geometryRegistry.setLastRect(sibling, {
@@ -200,7 +203,7 @@ describe("constraint 1: a pane's iframe survives every layout change", () => {
     });
 
     expect(screen.queryByTestId(`pane-frame-${sibling}`)).toBeNull();
-    expect(useWallStore.getState().load[sibling]).toBeUndefined();
+    expect(useWallStore.getState().load[site]).toBeUndefined();
     expect(useWallStore.getState().urlError[sibling]).toBeUndefined();
     // The registry lives outside React, so nothing else drops this entry.
     expect(geometryRegistry.lastRect(sibling)).toEqual(ZERO_RECT);

@@ -1,6 +1,7 @@
 import { act } from "@testing-library/react";
 
 import { createTree } from "../../src/layout/layout.tree.ts";
+import { isPane } from "../../src/layout/layout.types.ts";
 import { useWallStore } from "../../src/pane/pane.store.ts";
 
 /**
@@ -15,6 +16,20 @@ export function resetWallStore(rootId: string): void {
     { ...useWallStore.getInitialState(), tree: createTree(() => rootId, 1) },
     true,
   );
+}
+
+/**
+ * The ids of the sites a pane holds, newest last.
+ *
+ * Site ids are minted at random, so a test that wants to talk about one asks
+ * here rather than naming it. This is what the shell is addressed by: a webview
+ * is one site's page, not one pane's, so `pane_webview_*` carries a site id in
+ * the argument still spelled `paneId`.
+ */
+export function siteIdsOf(paneId: string): string[] {
+  const node = useWallStore.getState().tree.nodes[paneId];
+  if (node === undefined || !isPane(node)) return [];
+  return node.sites.map((site) => site.id);
 }
 
 /**
