@@ -24,6 +24,7 @@
 import { useEffect, useState } from "react";
 
 import type { PaneId, PaneStrategy, SplitDirection } from "../layout/layout.types.ts";
+import { PaneMenuRendererField } from "./pane.menu-renderer-field.tsx";
 
 export type PaneMenuPanelProps = {
   paneId: PaneId;
@@ -37,19 +38,6 @@ export type PaneMenuPanelProps = {
   onSplit: (direction: SplitDirection) => void;
   onClose: () => void;
 };
-
-const STRATEGIES: readonly PaneStrategy[] = ["auto", "iframe", "webview"];
-
-function strategyLabel(strategy: PaneStrategy, nativeHost: boolean): string {
-  switch (strategy) {
-    case "auto":
-      return nativeHost ? "Auto (webview)" : "Auto (iframe)";
-    case "iframe":
-      return "Iframe (reloads)";
-    case "webview":
-      return nativeHost ? "Webview (reloads)" : "Webview (desktop app only)";
-  }
-}
 
 export function PaneMenuPanel({
   paneId,
@@ -101,22 +89,12 @@ export function PaneMenuPanel({
         </span>
       )}
 
-      <div className="noc-pane__menu-field">
-        <span>Renderer</span>
-        <select
-          className="noc-pane__select"
-          aria-label={`Renderer for pane ${paneId}`}
-          data-testid={`pane-strategy-${paneId}`}
-          value={strategy}
-          onChange={(event) => onStrategyChange(event.target.value as PaneStrategy)}
-        >
-          {STRATEGIES.map((option) => (
-            <option key={option} value={option} disabled={option === "webview" && !nativeHost}>
-              {strategyLabel(option, nativeHost)}
-            </option>
-          ))}
-        </select>
-      </div>
+      <PaneMenuRendererField
+        paneId={paneId}
+        strategy={strategy}
+        nativeHost={nativeHost}
+        onStrategyChange={onStrategyChange}
+      />
 
       <div className="noc-pane__menu-rule" />
 
