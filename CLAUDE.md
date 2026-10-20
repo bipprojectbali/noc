@@ -29,7 +29,7 @@ src-tauri/src 4 file Rust (859 baris): main.rs, sidecar.rs, pane_webview.rs, coo
 tests/        mirror src/ + tests/setup/ + tests/fixtures/
 ```
 
-`src/server/server.entry.ts` satu-satunya entrypoint server (dev, binary, sidecar). `src/app/app.css` satu-satunya stylesheet, semua kelas ber-prefix `noc-`.
+`src/server/server.entry.ts` satu-satunya entrypoint server (dev, binary, sidecar). `src/app/app.css` satu-satunya stylesheet yang di-link halaman — sejak dipecah ia pengimpor tiga layer (lihat paragraf di bawah), bukan lagi tempat rule; semua kelas ber-prefix `noc-`.
 
 **`app.css` sudah dipecah — pengecualian 500 baris itu habis pada 710 baris / 19.977 karakter (sisa 23 karakter dari batas keras 20.000), dan pemecahannya dikerjakan saat tak ada fitur menunggu, bukan di tengah fitur.** Yang dipertahankan bukan "satu file", melainkan hal yang membuat satu file itu berharga: tepat satu jawaban atas "rule mana yang menang". Maka `app.css` **tinggal pengimpor** — tiga `@import` dan nol rule — dan urutannya bagian dari kontrak, bukan abjad:
 
