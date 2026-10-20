@@ -6,11 +6,13 @@ Router (library mode) and Zustand.
 ## Status
 
 The wall renders a tree of panes with a draggable splitter between every pair.
-Splits, docking and deletion are wired through the store and proven not to
-disturb a pane's iframe. Every pane now carries controls that reach those
-actions, and each pane can be drawn as an iframe or as a native webview — both
-built and unit-tested, neither yet seen on screen. The desktop shell is real:
-it runs the server as a sidecar and puts a native webview in each pane.
+Splits and deletion are wired through the store and proven not to disturb a
+pane's iframe. Every pane now carries one thin strip — the site's host and a ⋮
+button — and that button opens a menu holding the address field, Reload, the
+renderer picker, Split right, Split down and Close. Each pane can be drawn as
+an iframe or as a native webview. All of it is built and unit-tested; none of
+it has been seen on screen. The desktop shell is real: it runs the server as a
+sidecar and puts a native webview in each pane.
 
 | Milestone | State |
 | --- | --- |
@@ -18,7 +20,7 @@ it runs the server as a sidecar and puts a native webview in each pane.
 | M2 — pure tree engine: split, delete, resize, dock, invariants | done |
 | M3 — tree rendering with a stable flat pane layer | done |
 | M4 — splitter and drag resize | done for iframe panes, see below |
-| M5 — per-pane controls and the dock strip | built and unit-tested; not yet seen on screen, see below |
+| M5 — per-pane controls: one strip, one menu | built and unit-tested; not yet seen on screen, see below. Minimise and the dock strip were dropped from the UI |
 | M6 — freeze and suspend policy | not started; hiding a webview already suspends it for free, see below |
 | M7 — persistence and saved views | layout restores on reload and saves on change; saved views not started |
 | M8 — native webview renderer (Tauri) | panes render, respond and navigate, and now sit where they belong; the switch that picks the renderer is built but not yet seen on screen, see below |
@@ -51,9 +53,8 @@ Evaluated `dockview` and chose not to adopt it. Its React bindings live in
 `dockview-react`, it mounts fine, and it would have saved the splitter work.
 But by the time the question was settled the tree engine was already written
 and tested, so the saving was spent; adopting it would instead have cost
-deleting working code and migrating the persist format. It also has no concept
-of a dock strip, so it would not have reduced that work at all. Nothing
-structural depends on the choice, so it can be revisited cheaply.
+deleting working code and migrating the persist format. Nothing structural
+depends on the choice, so it can be revisited cheaply.
 
 ## Requirements
 
@@ -116,7 +117,7 @@ src/
   embed/     embeddability classification (pure)
   geometry/  rect maths, host registry, slot-to-pane sync
   layout/    pane tree: types, pure ops, invariants, serializer, renderer
-  pane/      pane UI, URL handling, load state machine, store, pane layer
+  pane/      pane UI (strip and menu), URL handling, load state machine, store, pane layer
   resize/    splitter, drag arithmetic, pane pointer suppression seam
   server/    entrypoint, routes, header probe
 tests/       mirrors src/, plus recorded header fixtures
@@ -162,6 +163,12 @@ lengths: title bar rows 0 to 55, the pane border at 56 to 57, pane chrome 58 to
 back after the window was moved and after it was resized, and the pane's URL
 bar takes a click again. This adds one macOS-only dependency, `objc2-app-kit`
 0.3, at the version tao and wry already pull in.
+
+That run measured the chrome as it was then: two rows, a URL bar and a button
+row. The chrome has since become one thin strip, so the band is shorter and
+the page starts higher. What was established is the arithmetic, which does not
+care how tall the chrome is; the exact rows above are a record of that run, not
+a prediction about the current build.
 
 **Tauri has no per-webview ignore-cursor-events.** The comment the renderer
 rests on is correct, checked against the installed crate sources (tauri 2.12.4,
@@ -218,32 +225,60 @@ has nothing to do with this cause, and no `waitFor` failed across 550 runs.
 
 Each entry says what is known, what is not, and one step that would close it.
 
-### 1. The pane controls and the dock strip have never been on screen
+### 1. The strip and the menu have never been on screen
 
-**Known.** Every pane carries a row with Split right, Split down, Minimise and
-Close, and a strip under the wall lists minimised panes with Restore and Close.
-The store actions behind them were already proven not to disturb a pane's
-iframe, and the new UI is covered by tests. The row is a sibling under the pane
-body and the strip sits outside `.noc-shell`, both for the reason the chrome
-is a sibling: a native webview paints over anything drawn on top of it.
+**Known.** This is a redesign, not a first build. The two permanent rows every
+pane used to carry — a URL bar above the body, a button row below it — made the
+wall unusable past a few panes: the URL field collapsed to a few characters,
+buttons overlapped, and one pane's row ran into the next pane's bar. Chrome cost
+scaled with pane count, which is backwards for a wall. In their place each pane
+has one thin strip, always visible, with the current host (or "Empty") on the
+left and a ⋮ button on the right; the button opens a panel holding the URL
+field, Reload, the renderer picker, Split right, Split down and Close.
+Right-click opens the same menu on the strip and on an empty pane's message —
+not over a loaded page, which is a platform limit and not an omission: a
+cross-origin iframe never hands `contextmenu` to its parent, and a native
+webview takes the event at OS level where the web layer never sees it. Minimise
+and the dock strip are gone from the UI; `dockPane`, `undockPane` and
+`setUrlBarVisible` stay in the store with docblocks saying so, because removing
+them is a database schema change rather than a delete.
 
-**Not known.** Everything visual. The suite runs under happy-dom, which
-measures every element at zero width and height, so nothing green here says the
-row is visible, that it has room, that the strip appears when a pane is
-minimised, or that the buttons are reachable with a native webview on the wall.
+The panel is an overlay, which this codebase otherwise forbids, and it is
+allowed only because it holds the splitter drag's suppressor for as long as it
+is open: every native webview on the wall is hidden while a menu is up. Hiding
+is not destroying, so those pages keep running and return at the same scroll
+position. No fourth `invoke` and no native menu were added — the cheap path
+first, revisited only if the blanking proves annoying.
 
-**Next step.** Run `bun run tauri:dev` and look at four things: that the control
-row is visible under every pane and is not covered by the page; that Split right
-and Split down produce the split they name without reloading the neighbouring
-page; that Minimise makes the pane vanish and a labelled entry appear in the
-strip below the wall, with the page still running when Restore brings it back;
-and that Close removes both the pane and its native webview. Also check the row
-while the URL bar is hidden — "Show URL bar" lives there and is the only way
-back.
+**Not known.** Everything visual. The suite runs under happy-dom, which measures
+every element at zero width and height, so none of its 213 passing assertions
+says the strip is visible, that the panel has room to open inside a narrow pane,
+that the buttons are reachable with a native webview on the wall, or that the
+blanking is tolerable to look at.
+
+**Next step.** Run `bun run tauri:dev` on a layout of at least three panes, two
+of them native webviews, and look at five things. That the strip is visible on
+every pane, shows the right host, and is not covered by the page. That ⋮ opens
+the panel, that the panel is actually on screen rather than hidden behind a
+webview, and that the URL field inside it is usable at the narrowest pane the
+wall will make. That Split right and Split down produce the split they name
+without reloading the neighbouring page, and that Close removes both the pane
+and its native webview. That the menu closes on all of Escape, a click outside,
+and a second press of ⋮, with the webviews coming back each time and no pane
+left blank afterwards. And the one thing no amount of code reading can answer:
+whether every webview on the wall going blank each time a menu opens reads as a
+reasonable cost or as the app flickering — open and close a menu a dozen times
+while the other panes hold live pages and judge it. If it is intrusive, the
+alternative is a native menu behind a fourth `invoke`.
+
+Then run `bun run dev` in a browser for the part the desktop app hides: there
+are no native webviews there, so nothing blanks, and the strip, the panel, the
+outside-click dismissal and right-click on an empty pane can be checked on
+their own. The Webview option must appear disabled rather than missing.
 
 ### 2. The renderer switch has never been on screen
 
-**Known.** Each pane's URL bar has a `<select>` choosing Iframe, Webview or
+**Known.** Each pane's menu has a `<select>` choosing Iframe, Webview or
 Auto, disabled on the webview option in a plain browser. Switching reloads the
 pane's content by design, destroys the old native webview when leaving one, and
 skips the embeddability probe for a pane that will be a webview, since no
@@ -260,9 +295,11 @@ all.
 names the header and offers the switch, then pick Webview and confirm the page
 appears as a native pane in the same slot while the pane beside it does not
 reload. Switch back to Iframe and confirm the native view is gone rather than
-left painting over the wall. Note that the option's label still warns that the
-webview hides the URL bar on macOS; that was true before the title bar fix
-above and should be checked on screen now.
+left painting over the wall. The label's old warning that a webview hides the
+pane's own bar on macOS has been dropped — it was true only while
+`chrome_height()` returned zero, and the chrome a pane has now is a strip above
+the webview's anchor, never across it. "reloads" stays in the label, because
+switching really does reload.
 
 ### 3. A long hide, and `<video>` and WebSocket under one, are not measured
 

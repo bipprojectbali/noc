@@ -4,14 +4,23 @@
 
 ### Added
 
-- Controls on every pane: split it side by side, split it top and bottom,
-  minimise it, or close it. A minimised pane keeps running — the strip under
-  the wall lists it and brings it back. Restoring puts the pane next to the
-  first pane on the wall, because there is no way yet to say where it should
-  go. Built and unit-tested, not yet seen on screen; see "Open items" in the
-  README.
+- Controls on every pane, behind one thin strip. The strip shows the site's
+  host — or "Empty" — and a ⋮ button; the button opens a panel with the
+  address field, Reload, the renderer picker, Split right, Split down and
+  Close. Right-click on the strip, or anywhere in an empty pane, opens the
+  same menu. Right-click over a loaded page cannot: a framed site keeps the
+  event to itself, and a native pane takes it before the app sees it. The
+  strip is deliberately small, because a wall is meant to hold many panes and
+  every pane pays for its own chrome. Built and unit-tested, not yet seen on
+  screen; see "Open items" in the README.
 
-- A renderer picker in each pane's URL bar: draw that pane as an iframe, as a
+- While a pane's menu is open, every pane drawn as a native webview goes
+  blank, and comes back when the menu closes. This is how the menu is able to
+  appear at all — in the desktop app a native pane paints over anything drawn
+  on top of it. The pages are only hidden, never stopped: they keep running
+  and return at the scroll position they were left at.
+
+- A renderer picker in each pane's menu: draw that pane as an iframe, as a
   native webview, or leave it on automatic. The webview is what puts a site
   that refuses to be framed on the wall, so a refused pane now says to try it;
   outside the desktop app the option is shown disabled rather than hidden.
@@ -37,10 +46,10 @@
 
 ### Fixed
 
-- A pane in the desktop app no longer covers its own URL bar. Every native
-  pane sat one title bar too high, hiding the bar it was meant to be typed
-  into and leaving a band of bare wall underneath it. Measured off screenshots
-  before and after, and again after moving and resizing the window.
+- A pane in the desktop app no longer covers its own chrome. Every native pane
+  sat one title bar too high, hiding the controls above it and leaving a band
+  of bare wall underneath it. Measured off screenshots before and after, and
+  again after moving and resizing the window.
 
 - Creating a pane no longer disturbs the pages already on the wall. Two panes
   created in the same millisecond could come out in the wrong order, which moved
