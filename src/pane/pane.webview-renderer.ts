@@ -286,7 +286,14 @@ export function createPaneWebviewRenderer(deps: PaneWebviewDeps): PaneWebviewRen
       entry.active = active;
       // Visibility only. Closing the webview of the site being left would
       // reload it on the way back, which is the one thing this wall exists to
-      // avoid; `pane_webview_close` has two callers and this is not a third.
+      // avoid. `pane_webview_close` has exactly three callers, and every one of
+      // them is discarding a document for good rather than putting it away:
+      // `deletePane`, which takes every site the pane held with it;
+      // `setPaneStrategy` when a pane leaves the webview renderer, because React
+      // cannot drop a view that was never in the DOM; and `releaseSite` from
+      // `removeSite`/`clearPane`, where that one page is thrown away while its
+      // pane stays. Leaving a site is none of those — hiding is not destroying,
+      // so switching sites is not a fourth caller.
       send(siteId, entry);
     },
 
