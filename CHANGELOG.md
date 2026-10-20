@@ -4,6 +4,23 @@
 
 ### Added
 
+- A page in a pane can be made bigger or smaller without touching the pane.
+  The ⋮ panel has a zoom row: minus, the current percentage, plus. Shrinking
+  does not just make the text smaller, it fits more of the page in — a
+  dashboard built for a full screen can be read in a quarter of one — and
+  enlarging makes a small number legible from across the room, which is the
+  distance this wall is actually watched from. The steps are the browser's own
+  (50% up to 200%), both ends stop rather than wrap, and the percentage in the
+  middle is also the way back to 100%; at an end, or in a pane holding no
+  page, the buttons are visibly disabled rather than quietly doing nothing.
+  The level belongs to the page, not to the pane: the other pages a pane holds
+  stay where they were, and a wall reopened tomorrow comes back readable from
+  the same distance it was left at. Magnifying a page never reloads it, so its
+  scroll and its session stay put. Panes drawn by the desktop app's native
+  renderer are not covered — there the row shows itself disabled and says why.
+  Verified in a real browser; see "Open items" in the README for what that
+  verification did and did not cover.
+
 - A framed site can keep you signed in. Open the wall at
   `http://wall.noc.localhost:7788/` instead of `127.0.0.1` and every pane is
   served through a sibling address of the wall's own, so the browser counts
