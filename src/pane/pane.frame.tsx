@@ -1,4 +1,5 @@
 import { isPane, type PaneId } from "../layout/layout.types.ts";
+import { PaneControls } from "./pane.controls.tsx";
 import { paneRendererFor } from "./pane.renderer.ts";
 import { paneLoadState, useWallStore } from "./pane.store.ts";
 import { PaneUrlBar } from "./pane.urlbar.tsx";
@@ -23,6 +24,9 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
   const submitUrl = useWallStore((state) => state.submitUrl);
   const reloadPane = useWallStore((state) => state.reloadPane);
   const setUrlBarVisible = useWallStore((state) => state.setUrlBarVisible);
+  const splitPane = useWallStore((state) => state.splitPane);
+  const dockPane = useWallStore((state) => state.dockPane);
+  const deletePane = useWallStore((state) => state.deletePane);
 
   if (node === undefined || !isPane(node)) {
     return <div className="noc-error">Pane {paneId} is not in the layout.</div>;
@@ -80,15 +84,14 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
         )}
       </div>
 
-      {!node.urlBarVisible && (
-        <button
-          className="noc-pane__button"
-          type="button"
-          onClick={() => setUrlBarVisible(paneId, true)}
-        >
-          Show URL bar
-        </button>
-      )}
+      <PaneControls
+        paneId={paneId}
+        urlBarVisible={node.urlBarVisible}
+        onSplit={(direction) => splitPane(paneId, direction)}
+        onDock={() => dockPane(paneId)}
+        onClose={() => deletePane(paneId)}
+        onShowUrlBar={() => setUrlBarVisible(paneId, true)}
+      />
     </section>
   );
 }
