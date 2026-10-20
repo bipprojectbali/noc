@@ -17,10 +17,10 @@ through the store.
 | M2 — pure tree engine: split, delete, resize, dock, invariants | done |
 | M3 — tree rendering with a stable flat pane layer | done |
 | M4 — splitter and drag resize | done for iframe panes, see below |
-| M5 — per-pane controls and the dock strip | not started |
+| M5 — per-pane controls and the dock strip | built and unit-tested; not yet seen on screen, see below |
 | M6 — freeze and suspend policy | not started; hiding a webview already suspends it for free, see below |
 | M7 — persistence and saved views | layout restores on reload and saves on change; saved views not started |
-| M8 — native webview renderer (Tauri) | panes render, respond and navigate; every pane sits one title bar too high, see below |
+| M8 — native webview renderer (Tauri) | panes render, respond and navigate, and now sit where they belong; the switch that picks the renderer is built but not yet seen on screen, see below |
 
 **What a browser confirmed.** Geometry no longer rests on injected rects alone.
 Against Chromium, with three panes on screen: slots measure non-zero, every pane
@@ -138,6 +138,29 @@ same pane navigated that same webview rather than rebuilding it. The `tauri dev`
 log carried no error, no warning and no panic. Screenshots of the run exist
 outside this repository.
 
+**A pane's page now meets its own chrome, with no overlap and no gap.** This
+was the one measured bug left in the shell: every pane sat 28 logical pixels —
+exactly one macOS title bar — too high, covering the URL bar it was meant to be
+typed into and leaving a band of bare wall beneath it. The cause was not the
+arithmetic but what it was reading. Tauri's default `TitleBarStyle::Visible`
+asks for `fullSizeContentView`, so the window's content view reaches up behind
+the title bar: a frame 875 tall has a content view 875 tall. Every size and
+position delta Tauri exposes is therefore zero, which is why the earlier
+`outer_size - inner_size` correction added nothing at all. WebKit pushes the
+page itself below the bar because it honours the safe area, while `wry` places
+a child webview in raw content-view coordinates, so the two disagree by the
+height of the bar. `chrome_height()` now reads that height from AppKit
+directly — `contentView().frame().size.height` minus the top of
+`contentLayoutRect()` — the one number here that is not zero, and zero on a
+window without that style.
+
+Established by screenshotting the window by id and counting pixel column run
+lengths: title bar rows 0 to 55, the pane border at 56 to 57, pane chrome 58 to
+123, and the page from 126 on — no overlap, no gap. The same run lengths came
+back after the window was moved and after it was resized, and the pane's URL
+bar takes a click again. This adds one macOS-only dependency, `objc2-app-kit`
+0.3, at the version tao and wry already pull in.
+
 **Tauri has no per-webview ignore-cursor-events.** The comment the renderer
 rests on is correct, checked against the installed crate sources (tauri 2.12.4,
 wry 0.57.0, tao 0.37.1). `set_ignore_cursor_events` exists on `Window` and on
@@ -193,32 +216,53 @@ has nothing to do with this cause, and no `waitFor` failed across 550 runs.
 
 Each entry says what is known, what is not, and one step that would close it.
 
-### 1. Every pane webview sits one title bar too high
+### 1. The pane controls and the dock strip have never been on screen
 
-This is a measured bug, not an unknown, and it is not fixed.
+**Known.** Every pane carries a row with Split right, Split down, Minimise and
+Close, and a strip under the wall lists minimised panes with Restore and Close.
+The store actions behind them were already proven not to disturb a pane's
+iframe, and the new UI is covered by tests. The row is a sibling under the pane
+body and the strip sits outside `.noc-shell`, both for the reason the chrome
+is a sibling: a native webview paints over anything drawn on top of it.
 
-**Known.** Measured off the pixel columns of screenshots and reproduced under
-two different conditions: a webview starts at logical y 60 where it should start
-at 88 — 53 for the top of the window's content, 1 px of border, and the 34 px of
-pane chrome (`--noc-chrome-height`). The difference, 28 logical pixels, is
-exactly the height of the macOS title bar. What it costs: the webview covers the
-pane's URL bar, leaving about 3 px of the input's top edge still clickable, and
-about 28 px of empty wall is left under every pane. Commit `1d5a946` was meant
-to prevent this and does not. `chrome_height()`
-(`src-tauri/src/pane_webview.rs:59-70`) computes `outer_size - inner_size`; on
-macOS those two are equal, so it returns 0 and the correction in `position()`
-(lines 34-50) adds nothing — while a child webview's coordinates are relative to
-the window frame, title bar included.
+**Not known.** Everything visual. The suite runs under happy-dom, which
+measures every element at zero width and height, so nothing green here says the
+row is visible, that it has room, that the strip appears when a pane is
+minimised, or that the buttons are reachable with a native webview on the wall.
 
-**Not known.** Whether that is the whole cause, and where the height should come
-from instead. Nothing has been changed in the shell.
+**Next step.** Run `bun run tauri:dev` and look at four things: that the control
+row is visible under every pane and is not covered by the page; that Split right
+and Split down produce the split they name without reloading the neighbouring
+page; that Minimise makes the pane vanish and a labelled entry appear in the
+strip below the wall, with the page still running when Restore brings it back;
+and that Close removes both the pane and its native webview. Also check the row
+while the URL bar is hidden — "Show URL bar" lives there and is the only way
+back.
 
-**Next step.** Log `outer_size`, `inner_size` and the window's content rect at
-runtime to confirm the two sizes really are equal, then derive the offset from
-the content rect rather than from their difference, and re-measure the top edge
-of the page against the bottom of the pane chrome.
+### 2. The renderer switch has never been on screen
 
-### 2. A long hide, and `<video>` and WebSocket under one, are not measured
+**Known.** Each pane's URL bar has a `<select>` choosing Iframe, Webview or
+Auto, disabled on the webview option in a plain browser. Switching reloads the
+pane's content by design, destroys the old native webview when leaving one, and
+skips the embeddability probe for a pane that will be a webview, since no
+framing header can refuse a top-level document. A refused pane's message now
+points at the switch when the app is native. Tested, including both sides of
+the host boundary.
+
+**Not known.** Whether any of it looks or behaves right. Same happy-dom limit as
+above, and the native path in particular cannot be exercised in the suite at
+all.
+
+**Next step.** Run `bun run tauri:dev` and switch one pane each way: put
+`https://www.youtube.com` in a pane set to Iframe, confirm the refusal message
+names the header and offers the switch, then pick Webview and confirm the page
+appears as a native pane in the same slot while the pane beside it does not
+reload. Switch back to Iframe and confirm the native view is gone rather than
+left painting over the wall. Note that the option's label still warns that the
+webview hides the URL bar on macOS; that was true before the title bar fix
+above and should be checked on screen now.
+
+### 3. A long hide, and `<video>` and WebSocket under one, are not measured
 
 **Known.** What the source says, above: hidden means not visible, which suspends
 `requestAnimationFrame` and aligns timers to about 1 Hz.
@@ -230,7 +274,7 @@ playback and WebSocket traffic are treated specially.
 that each write a timestamp, hidden for five minutes and then shown. The gaps in
 the two logs answer it.
 
-### 3. `createdAt` is monotonic only against the values it issued itself
+### 4. `createdAt` is monotonic only against the values it issued itself
 
 **Known.** `nextCreatedAt()` carries its own `lastCreatedAt` and never reads the
 tree. `restoreLayout` puts a stored tree straight into the store, so a layout
@@ -246,14 +290,13 @@ observed.
 tree, about two lines in `src/pane/pane.store.ts`. Left undone on purpose: the
 case is unproven.
 
-### 4. Loose ends found while verifying, none of them acted on
+### 5. Loose ends found while verifying, still open
 
-- `NOC_DB_FILE` is not passed to the sidecar by `sidecar_env()`
-  (`src-tauri/src/sidecar.rs`), so the variable is silently ignored when the app
-  runs under Tauri. The configuration table above does not say that.
-- The `{kind:"error"}` variant in `src/pane/pane.load-state.ts` is produced by no
-  event — a dead variant.
-- `geometryRegistry.forget()` is never called when a pane is released.
+The three code-level ones from this list are now closed: `sidecar_env()` passes
+`NOC_DB_FILE` through, the dead `{kind:"error"}` variant is gone from
+`PaneLoadState`, and `deletePane` calls `geometryRegistry.forget()`. What is
+left is the two that were only ever observations.
+
 - Seen once: the layout's `sizes` moved on their own from `[0.5, 0.5]` to
   `[0.5976, 0.4024]` when another application took the window focus. No cause
   established.

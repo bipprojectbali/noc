@@ -4,6 +4,21 @@
 
 ### Added
 
+- Controls on every pane: split it side by side, split it top and bottom,
+  minimise it, or close it. A minimised pane keeps running — the strip under
+  the wall lists it and brings it back. Restoring puts the pane next to the
+  first pane on the wall, because there is no way yet to say where it should
+  go. Built and unit-tested, not yet seen on screen; see "Open items" in the
+  README.
+
+- A renderer picker in each pane's URL bar: draw that pane as an iframe, as a
+  native webview, or leave it on automatic. The webview is what puts a site
+  that refuses to be framed on the wall, so a refused pane now says to try it;
+  outside the desktop app the option is shown disabled rather than hidden.
+  Switching reloads the page in that pane, which the control says before you
+  pick it. Built and unit-tested, not yet seen on screen; see "Open items" in
+  the README.
+
 - A splitter between the two halves of every split. Drag it to change how the
   space is shared; Escape puts the split back where it was. The panes stop
   taking the cursor for the length of the drag, so the pointer can cross a pane
@@ -22,10 +37,22 @@
 
 ### Fixed
 
+- A pane in the desktop app no longer covers its own URL bar. Every native
+  pane sat one title bar too high, hiding the bar it was meant to be typed
+  into and leaving a band of bare wall underneath it. Measured off screenshots
+  before and after, and again after moving and resizing the window.
+
 - Creating a pane no longer disturbs the pages already on the wall. Two panes
   created in the same millisecond could come out in the wrong order, which moved
   a pane that was already on screen and reloaded the site inside it. The order
   panes were created in is now kept exactly, so the page in a pane stays put.
+
+- `NOC_DB_FILE` now takes effect in the desktop app. The server read the
+  setting but the app never passed it on, so the database always landed under
+  the default name.
+
+- Closing a pane now releases what it held for its position on the wall,
+  instead of keeping it until the app exits.
 
 ## [0.2.0] - 2026-10-19
 

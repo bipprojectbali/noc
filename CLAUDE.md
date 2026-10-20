@@ -6,7 +6,7 @@ README = produk & milestone untuk manusia. File ini = perintah, invariant, jebak
 ## Perintah
 
 - `bun install` · `bun run dev` (hot, http://127.0.0.1:7788) · `bun run start` (tanpa hot)
-- `bun test` (15 file `*.test.ts(x)` di `tests/`) · `bun run typecheck` (`tsc --noEmit`)
+- `bun test` (18 file `*.test.ts(x)` di `tests/`) · `bun run typecheck` (`tsc --noEmit`)
 - `bun run build:sidecar` → `scripts/sidecar.build.ts` menghasilkan `src-tauri/binaries/noc-server-<triple>`; triple dari `rustc --print host-tuple`
 - `bun run tauri:dev` / `tauri:build` — keduanya menjalankan `build:sidecar` lewat `beforeDevCommand`/`beforeBuildCommand`
 - `bun run build:binary` → `dist/noc` standalone, **bukan** yang dipakai Tauri
@@ -19,11 +19,11 @@ src/embed/    klasifikasi embeddability, murni, dipakai server & browser
 src/geometry/ rect, registry host, sync slot→pane
 src/layout/   pohon pane: types, ops murni, invariants, serializer, renderer
 src/native/   native.bridge.ts — satu-satunya pintu ke Tauri
-src/pane/     UI pane, URL, state machine load, store, pane layer, 2 renderer
+src/pane/     UI pane, URL bar, kontrol pane, dock strip, state machine load, store, pane layer, 2 renderer
 src/persist/  port persist, client HTTP, repository SQLite, snapshot, writer
 src/resize/   splitter, aritmetika drag, seam penekan pointer
 src/server/   entrypoint, routes, probe header, ready line, parent watch
-src-tauri/src 3 file Rust (383 baris): main.rs, sidecar.rs, pane_webview.rs
+src-tauri/src 3 file Rust (403 baris): main.rs, sidecar.rs, pane_webview.rs
 tests/        mirror src/ + tests/setup/ + tests/fixtures/
 ```
 
@@ -45,12 +45,15 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 - Klasifikasi server-side: `GET /api/embeddability?url=` → `src/server/embed.probe.ts` (fetch target, `body.cancel()`, timeout 8 s) → `src/embed/embed.classifier.ts` (`X-Frame-Options` + CSP `frame-ancestors`). **Tidak ada header target yang di-strip atau ditulis ulang** — penolakan dilaporkan ke user, bukan diakali.
 - State pane = reducer murni `src/pane/pane.load-state.ts`: `empty → probing → loading | refused → ready`. Tiap event membawa `url`-nya agar hasil probe untuk alamat lama dibuang. Jangan menambah pembacaan `iframe.contentDocument` atau timer "kalau belum load berarti ditolak".
 - Verdict `unknown` sengaja optimistis → `loading`; `probe-failed` juga.
-- UI refusal hanya untuk renderer iframe (`framingApplies` di `pane.frame.tsx`); webview native adalah dokumen top-level, batas itu tak berlaku di sana.
+- UI refusal hanya untuk renderer iframe (`framingApplies` di `pane.frame.tsx`); webview native adalah dokumen top-level, batas itu tak berlaku di sana. Teks refusal bercabang pada `isNativeHost()`: di shell ia menyarankan pindah renderer, di browser ia bilang jalan keluarnya cuma ada di desktop app.
+- Pane yang benar-benar dirender sebagai webview **tidak** diprobe (`probe` di `pane.store.ts`): fetch-nya takkan dibaca siapa pun. Pane tetap harus keluar dari `probing`, jadi store langsung mengirim `probe-settled` dengan verdict `unknown`.
 
 **3. Child webview native adalah view level OS.** Selalu melukis di atas layer web, mengabaikan CSS clipping dan `pointer-events`. Maka:
 
-- Chrome pane (URL bar, tombol) wajib **sibling** dari anchor, bukan overlay — `pane.frame.tsx` + `src/pane/pane.webview-renderer.ts`. Toggle URL bar = event geometri (anchor punya `ResizeObserver` sendiri).
-- **Hide ≠ destroy.** `pane_webview_place(..., visible=false)` mempertahankan halaman; membuat ulang webview = reload, persis yang desain ini cegah. `pane_webview_close` hanya dari `deletePane`.
+- Chrome pane (URL bar, baris kontrol di `src/pane/pane.controls.tsx`) wajib **sibling** dari anchor, bukan overlay — `pane.frame.tsx` + `src/pane/pane.webview-renderer.ts`. Overlay di atas pane tidak akan terlihat sama sekali. Toggle URL bar = event geometri (anchor punya `ResizeObserver` sendiri); karena itu tombol "Show URL bar" tinggal di baris kontrol, bukan di URL bar yang disembunyikan.
+- Dock strip (`src/pane/pane.dock.tsx`) hidup **di luar** `.noc-shell`, sebagai sibling di dalam `.noc-wall` (`src/app/app.shell.tsx`). `.noc-shell` adalah ruang koordinat tempat host pane ditaruh; strip di dalamnya akan tertutup webview yang mau dikontrolnya.
+- **Hide ≠ destroy.** `pane_webview_place(..., visible=false)` mempertahankan halaman; membuat ulang webview = reload, persis yang desain ini cegah. `pane_webview_close` hanya dari dua tempat: `deletePane` dan `setPaneStrategy` saat pane pindah dari webview ke iframe (React tak bisa melepas view yang tak pernah ada di DOM). Jangan tambah pemanggil ketiga tanpa alasan sekuat itu.
+- **`chrome_height()` (`src-tauri/src/pane_webview.rs`) wajib baca AppKit, bukan selisih ukuran window.** Title bar style default Tauri = `fullSizeContentView`, jadi content view membentang sepenuh frame dan `outer_size - inner_size` selalu 0 di macOS — itulah kenapa koreksi aritmetika sebelumnya diam-diam tak berefek. Angka yang benar: `contentView().frame().size.height - (contentLayoutRect().origin.y + contentLayoutRect().size.height)` = 28 px logis. WebKit menggeser halaman turun sesuai safe area, tapi wry menaruh child webview di koordinat content view mentah. Dependency `objc2-app-kit` 0.3 khusus macOS; non-macOS mengembalikan 0.
 - **Hide = suspend gratis** (terbukti dari source WebKit, belum diukur): `hide()` → `setHidden:` (view tetap di hierarchy) → WebKit membersihkan `ActivityState::IsVisible`, jadi rAF ter-suspend, animasi SVG pause, `visibilityState` `"hidden"`, `setTimeout`/`setInterval` ter-align ~1 Hz. Pane tersembunyi nyaris nol CPU, tapi chart berbasis rAF mati total sampai `show()`. Knob `BackgroundThrottlingPolicy` Tauri **tidak** mengatur kasus ini — ia hanya berlaku bagi webview yang *detached* dari view hierarchy.
 - Selama drag splitter, frontend menyembunyikan semua webview lalu menampilkannya lagi (`createWebviewPointerSuppressor`, depth-counted), karena Tauri 2 hanya punya `setIgnoreCursorEvents` level window. Rust tidak punya logika drag — ia hanya menyediakan flag `visible`.
 - `src/resize/resize.pointer-capture.ts` adalah registry suppressor; jangan tambah cabang if/else renderer di situ. Kelas `body.noc-resizing` implementasi iframe saja. Catat: `pane.webview-renderer.ts` mendaftarkan suppressor-nya sebagai efek samping saat modul diimpor.
@@ -69,7 +72,7 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 - Pola port yang bisa di-inject: `createX(deps)` + singleton terpisah di file yang sama — `PaneRenderer`, `NativePaneBridge`, `WallPersistPort`, `PanePointerSuppressor`, `RectReader`, `GeometryRegistry`. Test membangun miliknya sendiri; jangan mem-mock modul.
 - Error memakai result-type (`{ok:true,...} | {ok:false, reason}`) bukan throw; throw hanya untuk input user/operator yang salah (`readConfig`, `splitPane` pada pane docked).
 - Tiap file dibuka docblock **"kenapa"**, bukan "apa". Pertahankan pola itu — komentar-komentar itulah yang mencegah invariant di atas "dibetulkan".
-- `data-testid` di tiap elemen penting: `slot-`, `split-`, `splitter-`, `pane-host-`, `pane-webview-`, `pane-refused-`.
+- `data-testid` di tiap elemen penting: `slot-`, `split-`, `splitter-`, `pane-host-`, `pane-webview-`, `pane-refused-`, `pane-controls-`, `pane-split-row-`/`pane-split-column-`, `pane-dock-`, `pane-close-`, `pane-strategy-`, `pane-dock-strip`, `dock-entry-`/`dock-restore-`/`dock-close-`.
 
 ## Jebakan test
 
@@ -82,13 +85,13 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 
 ## Env & keamanan
 
-Semua env dibaca **hanya** di `src/config/config.env.ts` — jangan baca `process.env` di tempat lain. `NOC_HOST` (127.0.0.1) · `NOC_PORT` (7788, `0` = ephemeral) · `NOC_DATA_DIR` (.noc-data) · `NOC_DB_FILE` (noc.sqlite) · `NOC_LOG_LEVEL` (info — divalidasi tapi belum dipakai di mana pun) · `NOC_PARENT_PID`. Shell Rust meneruskan `NOC_HOST`, `NOC_PORT`, `NOC_PARENT_PID`, plus `NOC_DATA_DIR`/`NOC_LOG_LEVEL` bila di-set; `NOC_DB_FILE` tidak diteruskan.
+Semua env dibaca **hanya** di `src/config/config.env.ts` — jangan baca `process.env` di tempat lain. `NOC_HOST` (127.0.0.1) · `NOC_PORT` (7788, `0` = ephemeral) · `NOC_DATA_DIR` (.noc-data) · `NOC_DB_FILE` (noc.sqlite) · `NOC_LOG_LEVEL` (info — divalidasi tapi belum dipakai di mana pun) · `NOC_PARENT_PID`. Shell Rust meneruskan `NOC_HOST`, `NOC_PORT`, `NOC_PARENT_PID`, plus `NOC_DATA_DIR`/`NOC_DB_FILE`/`NOC_LOG_LEVEL` bila di-set (`sidecar_env()` di `src-tauri/src/sidecar.rs`).
 
 Loopback bukan kebetulan: `/api/embeddability` membuat server mem-fetch URL pilihan client (SSRF bila terbuka) dan layout tersimpan berisi nama dashboard internal. Bind ke `0.0.0.0` hanya atas permintaan eksplisit operator. Path database di-resolve terhadap base dir eksplisit, bukan `process.cwd()`, dan tidak boleh berada di dalam executable (`bun build --compile` menerima tulisan lalu membuangnya saat proses keluar).
 
 ## Yang belum ada
 
-- **M5 — kontrol create/close pane & dock strip: belum ada.** `splitPane`, `deletePane`, `dockPane`, `undockPane` ada di store tapi **tidak dipanggil dari UI mana pun** (hanya dari test). Jangan anggap itu dead code.
+- **M5 sudah dibangun tapi BELUM pernah dilihat di layar.** `pane.controls.tsx` dan `pane.dock.tsx` memanggil `splitPane`/`dockPane`/`deletePane`/`undockPane` dari UI, dan test-nya hijau — tapi hijau di happy-dom tidak membuktikan apa pun soal geometri atau tata letak (lihat "Jebakan test"). Jangan tulis "M5 beres"; yang bisa dikatakan hanya "ada dan ter-unit-test".
+- **Switch renderer per pane (`<select>` di `pane.urlbar.tsx`) juga belum dilihat di layar.** Status yang sama: `setPaneStrategy`, `rendererChange`, skip probe, dan teks refusal bercabang semuanya ter-test, nol bukti visual.
+- **Restore dari dock belum bisa memilih tujuan.** `undockPane` butuh pane host + arah, dan UI belum punya konsep "pane terpilih", jadi `pane.dock.tsx` selalu restore di sebelah `listTreePaneIds(tree)[0]` dengan arah `"row"`. Penyederhanaan sengaja, bukan bug — perbaikannya butuh selected-pane atau drop target dulu.
 - Saved views: rute `/view/:viewId` dan tabel sudah ada, store view belum.
-- Varian `{kind:"error"}` di `PaneLoadState` tidak diproduksi reducer mana pun.
-- **Offset title bar masih rusak.** Webview native terbukti merender & interaktif, tapi tiap pane duduk 28 px logis terlalu tinggi (tinggi title bar macOS) karena `chrome_height()` di `src-tauri/src/pane_webview.rs` mengembalikan 0 di macOS — URL bar pane tertutup webview. Jangan klaim renderer webview sudah beres; baca "Open items" di README.
