@@ -7,10 +7,12 @@ Router (library mode) and Zustand.
 
 The wall renders a tree of panes with a draggable splitter between every pair.
 Splits and deletion are wired through the store and proven not to disturb a
-pane's iframe. Every pane now carries one thin strip — the site's host and a ⋮
-button — and that button opens a menu holding the address field, Reload, the
-renderer picker, Split right, Split down and Close. Each pane can be drawn as
-an iframe or as a native webview. All of it is built and unit-tested; none of
+pane's iframe. A pane's whole chrome is now one ⋮ button, floating over the
+top-right corner of an iframe pane and costing it no height at all; it opens a
+dropdown holding the address field, the renderer picker, Reload, Split right,
+Split down and Close. Each pane can be drawn as an iframe or as a native
+webview, and a webview pane keeps a 20px seam for its button because an
+OS-level view cannot be drawn over. All of it is built and unit-tested; none of
 it has been seen on screen. The desktop shell is real: it runs the server as a
 sidecar and puts a native webview in each pane.
 
@@ -20,7 +22,7 @@ sidecar and puts a native webview in each pane.
 | M2 — pure tree engine: split, delete, resize, dock, invariants | done |
 | M3 — tree rendering with a stable flat pane layer | done |
 | M4 — splitter and drag resize | done for iframe panes, see below |
-| M5 — per-pane controls: one strip, one menu | built and unit-tested; not yet seen on screen, see below. Minimise and the dock strip were dropped from the UI |
+| M5 — per-pane controls: one floating ⋮, one dropdown | built and unit-tested; not yet seen on screen, see below. Minimise and the dock strip were dropped from the UI |
 | M6 — freeze and suspend policy | not started; hiding a webview already suspends it for free, see below |
 | M7 — persistence and saved views | layout restores on reload and saves on change; saved views not started |
 | M8 — native webview renderer (Tauri) | panes render, respond and navigate, and now sit where they belong; the switch that picks the renderer is built but not yet seen on screen, see below |
@@ -117,7 +119,7 @@ src/
   embed/     embeddability classification (pure)
   geometry/  rect maths, host registry, slot-to-pane sync
   layout/    pane tree: types, pure ops, invariants, serializer, renderer
-  pane/      pane UI (strip and menu), URL handling, load state machine, store, pane layer
+  pane/      pane UI (⋮ button and menu), URL handling, load state machine, store, pane layer
   resize/    splitter, drag arithmetic, pane pointer suppression seam
   server/    entrypoint, routes, header probe
 tests/       mirrors src/, plus recorded header fixtures
@@ -165,10 +167,11 @@ bar takes a click again. This adds one macOS-only dependency, `objc2-app-kit`
 0.3, at the version tao and wry already pull in.
 
 That run measured the chrome as it was then: two rows, a URL bar and a button
-row. The chrome has since become one thin strip, so the band is shorter and
-the page starts higher. What was established is the arithmetic, which does not
-care how tall the chrome is; the exact rows above are a record of that run, not
-a prediction about the current build.
+row. The chrome has since shrunk twice — to one thin strip, and then to a
+single ⋮ that an iframe pane pays nothing for and a webview pane carries in a
+20px seam. The band above the page is shorter each time. What was established
+is the arithmetic, which does not care how tall the chrome is; the exact rows
+above are a record of that run, not a prediction about the current build.
 
 **Tauri has no per-webview ignore-cursor-events.** The comment the renderer
 rests on is correct, checked against the installed crate sources (tauri 2.12.4,
@@ -225,21 +228,36 @@ has nothing to do with this cause, and no `waitFor` failed across 550 runs.
 
 Each entry says what is known, what is not, and one step that would close it.
 
-### 1. The strip and the menu have never been on screen
+### 1. The floating ⋮ and its menu have never been on screen
 
-**Known.** This is a redesign, not a first build. The two permanent rows every
-pane used to carry — a URL bar above the body, a button row below it — made the
-wall unusable past a few panes: the URL field collapsed to a few characters,
-buttons overlapped, and one pane's row ran into the next pane's bar. Chrome cost
-scaled with pane count, which is backwards for a wall. In their place each pane
-has one thin strip, always visible, with the current host (or "Empty") on the
-left and a ⋮ button on the right; the button opens a panel holding the URL
-field, Reload, the renderer picker, Split right, Split down and Close.
-Right-click opens the same menu on the strip and on an empty pane's message —
-not over a loaded page, which is a platform limit and not an omission: a
-cross-origin iframe never hands `contextmenu` to its parent, and a native
-webview takes the event at OS level where the web layer never sees it. Minimise
-and the dock strip are gone from the UI; `dockPane`, `undockPane` and
+**Known.** This is the second redesign, not a first build. The two permanent
+rows every pane used to carry — a URL bar above the body, a button row below it
+— made the wall unusable past a few panes. The thin strip that replaced them
+was cheaper but still a seam: a wall of panes read as stitched together, and a
+wall put on monitors is looked at far more than it is operated. So the strip is
+gone and with it the host label, which now survives only as the button's
+tooltip.
+
+What is left is one ⋮. Over an **iframe** pane it floats in the top-right
+corner, absolutely positioned and shrink-wrapped, so the body runs edge to edge
+and the only part of the page it can cover is a 24px square; it sits at 14%
+opacity until the pane is hovered, the button is focused, or the menu is open,
+and it carries its own dark fill and hairline ring so it stays legible over a
+white dashboard and a dark one alike. Over a **native webview** pane none of
+that is possible — an OS-level view paints above the whole web layer and
+ignores CSS — so that pane alone keeps a 20px seam holding nothing but the
+button. The choice is made per pane from the renderer actually serving it
+(`pane.frame.tsx`), never once for the wall, because a wall can hold both.
+
+The button opens an ordinary desktop dropdown: fixed 224px, hung under the
+button and aligned to it, with the address field and the renderer picker
+sharing one geometry at the top, Reload, Split right and Split down as 28px
+rows, and Close last in the danger colour. Enter submits the address; there is
+no Go button. Right-click opens the same menu on the chrome and on an empty
+pane's message — not over a loaded page, which is a platform limit and not an
+omission: a cross-origin iframe never hands `contextmenu` to its parent, and a
+native webview takes the event at OS level where the web layer never sees it.
+Minimise and the dock strip are gone from the UI; `dockPane`, `undockPane` and
 `setUrlBarVisible` stay in the store with docblocks saying so, because removing
 them is a database schema change rather than a delete.
 
@@ -251,14 +269,18 @@ position. No fourth `invoke` and no native menu were added — the cheap path
 first, revisited only if the blanking proves annoying.
 
 **Not known.** Everything visual. The suite runs under happy-dom, which measures
-every element at zero width and height, so none of its 213 passing assertions
-says the strip is visible, that the panel has room to open inside a narrow pane,
-that the buttons are reachable with a native webview on the wall, or that the
-blanking is tolerable to look at.
+every element at zero width and height, so none of its 215 passing assertions
+says that an iframe pane's body really runs edge to edge, that the ⋮ is legible
+over an actual bright website or lost over a dark one, that 14% opacity is
+"nearly invisible" rather than "invisible", that the 224px dropdown fits inside
+a narrow pane instead of running off its edge, that the 20px seam is enough to
+click in, that the buttons are reachable with a native webview on the wall, or
+that the blanking is tolerable to look at.
 
 **Next step.** Run `bun run tauri:dev` on a layout of at least three panes, two
-of them native webviews, and look at five things. That the strip is visible on
-every pane, shows the right host, and is not covered by the page. That ⋮ opens
+of them native webviews, and look at five things. That an iframe pane shows no
+seam at all while a webview pane shows its 20px one, and that the ⋮ is findable
+on both without being a distraction on either. That ⋮ opens
 the panel, that the panel is actually on screen rather than hidden behind a
 webview, and that the URL field inside it is usable at the narrowest pane the
 wall will make. That Split right and Split down produce the split they name
@@ -272,9 +294,9 @@ while the other panes hold live pages and judge it. If it is intrusive, the
 alternative is a native menu behind a fourth `invoke`.
 
 Then run `bun run dev` in a browser for the part the desktop app hides: there
-are no native webviews there, so nothing blanks, and the strip, the panel, the
-outside-click dismissal and right-click on an empty pane can be checked on
-their own. The Webview option must appear disabled rather than missing.
+are no native webviews there, so nothing blanks, and the floating ⋮, the
+dropdown, the outside-click dismissal and right-click on an empty pane can be
+checked on their own — over real sites of both brightnesses. The Webview option must appear disabled rather than missing.
 
 ### 2. The renderer switch has never been on screen
 
