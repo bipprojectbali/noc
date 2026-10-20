@@ -12,7 +12,13 @@ import {
   dockPane,
   undockPane,
 } from "../../src/layout/layout.remove.ts";
-import { isSplit, type LayoutTree } from "../../src/layout/layout.types.ts";
+import { movePane, swapPanes } from "../../src/layout/layout.move.ts";
+import {
+  isPane,
+  isSplit,
+  type LayoutTree,
+  type PaneSide,
+} from "../../src/layout/layout.types.ts";
 
 const SEED_COUNT = 200;
 const OPS_PER_SEED = 40;
@@ -40,6 +46,16 @@ function splitIds(tree: LayoutTree): string[] {
     .map((node) => node.id);
 }
 
+/** Every pane node that exists, in the tree or in the dock. */
+function allPaneIds(tree: LayoutTree): string[] {
+  return Object.values(tree.nodes)
+    .filter((node) => isPane(node))
+    .map((node) => node.id)
+    .sort();
+}
+
+const SIDES: readonly PaneSide[] = ["left", "right", "top", "bottom"];
+
 type Step = { op: string; args: string[] };
 
 /** Applies one random operation. Returns the same tree when the op does not apply. */
@@ -51,9 +67,18 @@ function applyRandomOp(
 ): { tree: LayoutTree; step: Step } {
   const treePanes = listTreePaneIds(tree);
   const docked = tree.dock.map((entry) => entry.paneId);
-  const ops = ["split", "delete", "dock", "undock", "resize"] as const;
+  const ops = [
+    "split",
+    "delete",
+    "dock",
+    "undock",
+    "resize",
+    "move",
+    "swap",
+  ] as const;
   const op = ops[Math.floor(random() * ops.length)] ?? "split";
   const direction = random() < 0.5 ? "row" : "column";
+  const side = SIDES[Math.floor(random() * SIDES.length)] ?? "left";
 
   switch (op) {
     case "split": {
@@ -89,6 +114,28 @@ function applyRandomOp(
         step: { op, args: [target, host, direction] },
       };
     }
+    // Move and swap draw from docked panes too, so the refusal paths are
+    // exercised as hard as the structural ones.
+    case "move": {
+      const source = pick(random, [...treePanes, ...docked]);
+      const target = pick(random, [...treePanes, ...docked]);
+      if (source === undefined || target === undefined) break;
+      const result = movePane(tree, source, target, side, makeId);
+      return {
+        tree: result.ok ? result.tree : tree,
+        step: { op: result.ok ? op : `${op}:refused`, args: [source, target, side] },
+      };
+    }
+    case "swap": {
+      const source = pick(random, [...treePanes, ...docked]);
+      const target = pick(random, [...treePanes, ...docked]);
+      if (source === undefined || target === undefined) break;
+      const result = swapPanes(tree, source, target);
+      return {
+        tree: result.ok ? result.tree : tree,
+        step: { op: result.ok ? op : `${op}:refused`, args: [source, target] },
+      };
+    }
     case "resize": {
       const target = pick(random, splitIds(tree));
       if (target === undefined) break;
@@ -112,9 +159,16 @@ describe("tree invariants hold under arbitrary operation sequences", () => {
       const history: Step[] = [];
 
       for (let i = 0; i < OPS_PER_SEED; i++) {
+        const panesBefore = allPaneIds(tree);
         const result = applyRandomOp(tree, random, makeId, i + 1);
         tree = result.tree;
         history.push(result.step);
+
+        // Rearranging must never mint or drop a pane id: a new id is a new
+        // pane to the pane layer, which means a remount and a page reload.
+        if (result.step.op === "move" || result.step.op === "swap") {
+          expect(allPaneIds(tree)).toEqual(panesBefore);
+        }
 
         const violations = findViolations(tree);
         if (violations.length > 0) {
@@ -126,6 +180,59 @@ describe("tree invariants hold under arbitrary operation sequences", () => {
           );
         }
         expect(listTreePaneIds(tree).length).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+});
+
+describe("rearranging alone never changes which panes exist", () => {
+  test(`${SEED_COUNT} seeds of move/swap only keep the pane set and the tree intact`, () => {
+    for (let seed = 1; seed <= SEED_COUNT; seed++) {
+      const random = mulberry32(seed);
+      let counter = 0;
+      const makeId = () => `n${++counter}`;
+
+      // Grow a wall first; move and swap can only shuffle what is already there.
+      let tree = createTree(makeId, 0);
+      for (let i = 0; i < 6; i++) {
+        const target = pick(random, listTreePaneIds(tree));
+        if (target === undefined) continue;
+        tree = splitPane(tree, target, random() < 0.5 ? "row" : "column", makeId, i + 1);
+      }
+
+      const panes = allPaneIds(tree);
+      const history: Step[] = [];
+
+      for (let i = 0; i < OPS_PER_SEED; i++) {
+        const swapOnly = random() < 0.5;
+        const panesNow = listTreePaneIds(tree);
+        const a = pick(random, panesNow);
+        const b = pick(random, panesNow);
+        if (a === undefined || b === undefined) continue;
+        const side = SIDES[Math.floor(random() * SIDES.length)] ?? "left";
+
+        const result = swapOnly
+          ? swapPanes(tree, a, b)
+          : movePane(tree, a, b, side, makeId);
+        history.push({
+          op: swapOnly ? "swap" : "move",
+          args: swapOnly ? [a, b] : [a, b, side],
+        });
+        if (!result.ok) {
+          throw new Error(`seed ${seed} step ${i}: refused with "${result.reason}"`);
+        }
+        tree = result.tree;
+
+        const violations = findViolations(tree);
+        if (violations.length > 0) {
+          const trail = history
+            .map((step) => `${step.op}(${step.args.join(", ")})`)
+            .join(" -> ");
+          throw new Error(
+            `seed ${seed} step ${i}: ${violations.join("; ")}\nhistory: ${trail}`,
+          );
+        }
+        expect(allPaneIds(tree)).toEqual(panes);
       }
     }
   });

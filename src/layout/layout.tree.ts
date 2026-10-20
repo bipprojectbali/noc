@@ -9,11 +9,14 @@ import {
 } from "./layout.node.ts";
 import {
   isPane,
+  sideIsLeading,
+  sideToDirection,
   type LayoutNode,
   type LayoutTree,
   type NodeId,
   type PaneId,
   type PaneNode,
+  type PaneSide,
   type PaneStrategy,
   type SplitDirection,
   type SplitNode,
@@ -91,6 +94,55 @@ export function splitPane(
 
   const parent = requireSplit(tree, pane.parentId);
   nodes[parent.id] = replaceChild(parent, paneId, splitId);
+  return { ...tree, nodes };
+}
+
+/**
+ * Wraps `hostPaneId` in a fresh split and puts an *existing* pane node in the
+ * other slot. Shared by undock and move: both re-enter a pane the wall already
+ * renders, so neither may mint a pane id — only the split node is new.
+ *
+ * The new split inherits the host's slot (and therefore its share of the
+ * grandparent), while the two panes inside it start at 0.5/0.5, exactly like
+ * `splitPane`. Callers must not pass `paneId === hostPaneId`; a split with the
+ * same child twice is a malformed tree.
+ */
+export function insertPaneBeside(
+  tree: LayoutTree,
+  paneId: PaneId,
+  hostPaneId: PaneId,
+  side: PaneSide,
+  makeId: MakeId,
+): LayoutTree {
+  const host = requirePane(tree, hostPaneId);
+  const pane = requirePane(tree, paneId);
+
+  const splitId = makeId();
+  const children: [NodeId, NodeId] = sideIsLeading(side)
+    ? [paneId, hostPaneId]
+    : [hostPaneId, paneId];
+  const split: SplitNode = {
+    id: splitId,
+    kind: "split",
+    parentId: host.parentId,
+    direction: sideToDirection(side),
+    children,
+    sizes: [0.5, 0.5],
+  };
+
+  const nodes: Record<NodeId, LayoutNode> = {
+    ...tree.nodes,
+    [hostPaneId]: { ...host, parentId: splitId },
+    [paneId]: { ...pane, parentId: splitId },
+    [splitId]: split,
+  };
+
+  if (host.parentId === null) {
+    return { ...tree, rootId: splitId, nodes };
+  }
+
+  const parent = requireSplit(tree, host.parentId);
+  nodes[parent.id] = replaceChild(parent, hostPaneId, splitId);
   return { ...tree, nodes };
 }
 
