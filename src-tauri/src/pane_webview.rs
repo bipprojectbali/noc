@@ -244,9 +244,15 @@ fn chrome_label(pane_label: &str) -> String {
 /// cannot leave this pointing at the old one. `pane_id` reached us through
 /// `pane_label`, which allows ASCII alphanumerics, `-` and `_` only, so it needs
 /// no escaping to go in a query string.
+///
+/// Asks for the wall's *webview* and not for `get_webview_window`, which looks
+/// like the obvious call and is the wrong one: Tauri only answers that for a
+/// window holding exactly one webview, so the wall stops being a "webview
+/// window" the moment the first pane is added as a child of it. Every chrome
+/// then failed to build with "the wall window is not open" while the window was
+/// plainly on screen.
 fn chrome_url(app: &AppHandle, pane_id: &str) -> Result<tauri::Url, String> {
-    let wall = app
-        .get_webview_window(WALL_WINDOW_LABEL)
+    let wall = pane_webview(app, WALL_WINDOW_LABEL)
         .ok_or_else(|| "The wall window is not open".to_string())?;
     let mut url = wall
         .url()
@@ -265,6 +271,14 @@ fn chrome_url(app: &AppHandle, pane_id: &str) -> Result<tauri::Url, String> {
 /// showing its page with no ⋮ is worth more than a pane that refused to open,
 /// and the wall page's own hidden ⋮ comes back as soon as a menu is opened
 /// anywhere.
+///
+/// Called from `place_pane` and nowhere else, which is not where it looks like
+/// it belongs until you see what a pane's first `show` carries: the wall page
+/// opens every site before it has laid the wall out, so that rect is 0x0 and has
+/// no corner to put a button in. The page survives that because the `place` that
+/// follows corrects it; attaching the chrome to `show` instead gave it no second
+/// chance, and every pane came up bare. Creating it from the same call that
+/// corrects the page is the one place that is always reached with a real rect.
 fn ensure_chrome(app: &AppHandle, pane_id: &str, label: &str, rect: PaneRect, visible: bool) {
     let label = chrome_label(label);
     if pane_webview(app, &label).is_some() {
@@ -352,9 +366,6 @@ pub fn pane_webview_show(
                 .map_err(|error| format!("Pane {pane_id} could not navigate: {error}"))?;
             history.remember(&label, &url);
         }
-        // Not only on the create path: a pane whose chrome failed to build, or
-        // one first shown while it had no area to put a corner in, gets one here.
-        ensure_chrome(&app, &pane_id, &label, rect, visible);
         return place_pane(&app, &pane_id, &label, rect, visible);
     }
 
@@ -376,8 +387,9 @@ pub fn pane_webview_show(
             .hide()
             .map_err(|error| format!("Pane {pane_id} could not be hidden: {error}"))?;
     }
-    // After the page and never before it: creation order is paint order.
-    ensure_chrome(&app, &pane_id, &label, rect, visible);
+    // The chrome is not built here even though this is where the page is: see
+    // `ensure_chrome`. The `place` that follows this call is what creates it,
+    // and it is still created after the page, which is all paint order needs.
     Ok(())
 }
 
@@ -437,6 +449,7 @@ fn place_pane(
     rect: PaneRect,
     visible: bool,
 ) -> Result<(), String> {
+    ensure_chrome(app, pane_id, label, rect, visible);
     if let Some(chrome) = pane_webview(app, &chrome_label(label)) {
         let corner = rect.chrome_corner();
         // No corner means no area, which is already "not on screen".
