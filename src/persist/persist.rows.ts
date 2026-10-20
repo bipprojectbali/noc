@@ -1,20 +1,29 @@
 /**
- * Row mapping between the `panes` / `splits` / `dock` tables and a `LayoutTree`.
+ * Row mapping between the `panes` / `pane_sites` / `splits` / `dock` tables and
+ * a `LayoutTree`.
  *
  * The rebuilt tree is handed to `parseLayout`, so a stored wall goes through the
  * same version migration and the same structural checks as any other persisted
  * layout instead of being trusted because it came from our own database.
+ *
+ * `panes.home_url` is legacy: addresses live in `pane_sites` since schema 2,
+ * its only remaining reader is that step's one-shot backfill, and writes here
+ * leave it null. Kept rather than dropped because dropping a column in SQLite
+ * means rebuilding the table. `panes.current_url` is *not* legacy — it holds
+ * `WallSnapshot.currentUrls`, which is keyed per pane, not per site.
  */
 
 import type { Database } from "bun:sqlite";
 
 import { parseLayout, serializeLayout } from "../layout/layout.serializer.ts";
-import { activePaneUrl } from "../layout/layout.sites.ts";
 import {
   isPane,
   type NodeId,
   type PaneId,
+  type PaneNode,
+  type PaneSite,
   type PaneStrategy,
+  type SiteId,
   type SplitDirection,
   type SplitNode,
 } from "../layout/layout.types.ts";
@@ -24,34 +33,29 @@ import type { WallSnapshot } from "./persist.types.ts";
 export type StoredLayout = Omit<WallSnapshot, "settings">;
 
 /**
- * The tree shape these rows can express. `panes` carries one `home_url` column
- * and nothing else, so a row set *is* a version 1 tree whatever the live shape
- * has become; `parseLayout` migrates it forward on the way out. A pane holding
- * several sites therefore persists only the one it is showing. Bump this
- * together with the schema step that gives sites a table of their own.
+ * The tree shape these rows express. Since schema 2 that is version 2: a pane's
+ * sites each have a row, in order, with one of them flagged active. The
+ * `layouts.layout_version` column records the version the rows were written at,
+ * and the schema step that moved them forward re-stamped it — so a read never
+ * runs a tree migration over rows that have already had it applied.
  */
-const ROW_TREE_VERSION = 1;
-
-/** A pane as the columns describe it: the v1 node, before sites existed. */
-type RowPaneNode = {
-  id: NodeId;
-  kind: "pane";
-  parentId: NodeId | null;
-  url: string | null;
-  urlBarVisible: boolean;
-  strategy: PaneStrategy;
-  createdAt: number;
-};
+const ROW_TREE_VERSION = 2;
 
 type LayoutRow = { root_id: string; layout_version: number };
 type PaneRow = {
   id: string;
   parent_id: string | null;
-  home_url: string | null;
   current_url: string | null;
   url_bar_visible: number;
   strategy: string;
   created_at: number;
+};
+type PaneSiteRow = {
+  pane_id: string;
+  site_id: string;
+  url: string;
+  created_at: number;
+  is_active: number;
 };
 type SplitRow = {
   id: string;
@@ -64,6 +68,32 @@ type SplitRow = {
 };
 type DockRow = { pane_id: string; docked_at: number };
 
+type HeldSites = { sites: PaneSite[]; activeSiteId: SiteId | null };
+
+/**
+ * Sites per pane, in stored order. `ORDER BY position` is the whole contract:
+ * the list is creation order and reordering it reloads pages (`layout.sites.ts`
+ * explains why). Not `created_at` — two sites added in one millisecond tie.
+ */
+function readSites(db: Database, layoutId: string): Map<PaneId, HeldSites> {
+  const byPane = new Map<PaneId, HeldSites>();
+  for (const row of db
+    .query<PaneSiteRow, [string]>(
+      `SELECT pane_id, site_id, url, created_at, is_active
+       FROM pane_sites WHERE layout_id = ? ORDER BY pane_id, position`,
+    )
+    .all(layoutId)) {
+    let entry = byPane.get(row.pane_id);
+    if (entry === undefined) {
+      entry = { sites: [], activeSiteId: null };
+      byPane.set(row.pane_id, entry);
+    }
+    entry.sites.push({ id: row.site_id, url: row.url, createdAt: row.created_at });
+    if (row.is_active === 1) entry.activeSiteId = row.site_id;
+  }
+  return byPane;
+}
+
 export function readLayout(db: Database, layoutId: string): StoredLayout | null {
   const header = db
     .query<LayoutRow, [string]>(
@@ -72,20 +102,25 @@ export function readLayout(db: Database, layoutId: string): StoredLayout | null 
     .get(layoutId);
   if (header === null) return null;
 
-  const nodes: Record<NodeId, RowPaneNode | SplitNode> = {};
+  const nodes: Record<NodeId, PaneNode | SplitNode> = {};
   const currentUrls: Record<PaneId, string | null> = {};
+  const sitesByPane = readSites(db, layoutId);
 
   for (const row of db
     .query<PaneRow, [string]>(
-      `SELECT id, parent_id, home_url, current_url, url_bar_visible, strategy, created_at
+      `SELECT id, parent_id, current_url, url_bar_visible, strategy, created_at
        FROM panes WHERE layout_id = ? ORDER BY created_at`,
     )
     .all(layoutId)) {
+    const held = sitesByPane.get(row.id);
     nodes[row.id] = {
       id: row.id,
       kind: "pane",
       parentId: row.parent_id,
-      url: row.home_url,
+      sites: held?.sites ?? [],
+      // Left as stored even when it disagrees with `sites`: `assertWellFormed`
+      // reports that below, and a quiet fallback would hide a damaged file.
+      activeSiteId: held?.activeSiteId ?? null,
       urlBarVisible: row.url_bar_visible === 1,
       // Constrained by a CHECK on the column, so the stored value is always one
       // of the three the type allows.
@@ -145,14 +180,23 @@ export function writeLayout(
   );
   // Replacing the whole node set beats diffing it: a wall holds tens of nodes,
   // and the alternative is reconciliation logic that can drift from the tree.
+  // Cleared by hand — the only cascade is on `layouts`, whose row stays.
   db.run("DELETE FROM dock WHERE layout_id = ?", [layoutId]);
   db.run("DELETE FROM panes WHERE layout_id = ?", [layoutId]);
+  db.run("DELETE FROM pane_sites WHERE layout_id = ?", [layoutId]);
   db.run("DELETE FROM splits WHERE layout_id = ?", [layoutId]);
 
+  // `home_url` is left out on purpose: writing the active site into the legacy
+  // column would invite a future reader to treat it as the truth.
   const insertPane = db.query(
-    `INSERT INTO panes (id, layout_id, parent_id, home_url, current_url,
+    `INSERT INTO panes (id, layout_id, parent_id, current_url,
                         url_bar_visible, strategy, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const insertSite = db.query(
+    `INSERT INTO pane_sites (layout_id, pane_id, site_id, position, url,
+                             created_at, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertSplit = db.query(
     `INSERT INTO splits (id, layout_id, parent_id, direction, child_a, child_b,
@@ -166,12 +210,23 @@ export function writeLayout(
         node.id,
         layoutId,
         node.parentId,
-        activePaneUrl(node),
         snapshot.currentUrls[node.id] ?? null,
         node.urlBarVisible ? 1 : 0,
         node.strategy,
         node.createdAt,
       );
+      // The array index is the position, so the list comes back as held.
+      node.sites.forEach((site, position) => {
+        insertSite.run(
+          layoutId,
+          node.id,
+          site.id,
+          position,
+          site.url,
+          site.createdAt,
+          site.id === node.activeSiteId ? 1 : 0,
+        );
+      });
     } else {
       insertSplit.run(
         node.id,
