@@ -153,6 +153,35 @@ export function wallProxyBase(hostname: string): string | null {
 }
 
 /**
+ * Hostnames that can only mean the machine this server runs on. Deliberately
+ * narrower than "not proxy-capable": a wall bound to a routable address — the
+ * discouraged `0.0.0.0` option — is reached by someone else's browser, and
+ * sending *that* browser to a `*.localhost` host would point it at its own
+ * machine and turn a working wall into a connection error.
+ */
+function isLoopbackHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host === "localhost") return true;
+  // `URL.hostname` keeps the brackets on a v6 literal; a `Host` header may not.
+  if (host === "::1" || host === "[::1]") return true;
+  return /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+}
+
+/**
+ * The hostname a wall request should have arrived on, or null to answer it
+ * where it stands.
+ *
+ * The wall knows which of its two addresses lets a pane keep a session, so it
+ * goes there instead of asking the user to. No loop is possible: the answer is
+ * always `WALL_PROXY_HOSTNAME`, which is not a loopback *name* and so never
+ * qualifies to be moved again — and a site host, being neither, is left alone
+ * here as well as upstream.
+ */
+export function wallLandingHostname(hostname: string): string | null {
+  return isLoopbackHostname(hostname) ? WALL_PROXY_HOSTNAME : null;
+}
+
+/**
  * Reads a site label back off an incoming `Host`. The label alone decides
  * nothing: the registry still has to know it, so an invented hostname gets a
  * 404 rather than a fetch.

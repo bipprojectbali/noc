@@ -5,8 +5,9 @@
 ### Added
 
 - A framed site can keep you signed in. Open the wall at
-  `http://wall.noc.localhost:7788/` instead of `127.0.0.1` and every pane is
-  served through a sibling address of the wall's own, so the browser counts
+  `http://localhost:7788/` as you always did and the browser is taken on to
+  `http://wall.noc.localhost:7788/`, where every pane is served through a
+  sibling address of the wall's own, so the browser counts
   the site as part of the same site as the wall and stops withholding its
   session cookie. Before this, signing in inside a pane appeared to work and
   the very next request arrived without the cookie, which is why those panes
@@ -17,9 +18,15 @@
   by one site cannot be read by another. Sites that refuse to be framed at all
   now load, which falls out of the same change rather than being the point of
   it. The address you type and see is still the site's real address; only what
-  the pane loads differs. A wall opened at `127.0.0.1` behaves exactly as
-  before and says, in the corner, where to open it instead. The desktop app is
-  untouched — its panes are real windows, which never had this problem.
+  the pane loads differs. It is the same wall either way — the layout lives in
+  the database, not in the browser — so nothing is lost in the move, and you
+  land on the page you asked for, saved view and all. The wall used to print a
+  line in the corner telling you to go and open the other address yourself;
+  that line is gone, because a program that knows which address works should
+  go there. A wall reached across the network is left where it is, since the
+  loopback name would point at your own machine instead of at the wall. The
+  desktop app is untouched — its panes are real windows, which never had this
+  problem.
   Verified in a real browser, including that the session survives a full
   reload of the wall, but only against a stand-in dashboard: see "Open items"
   in the README for the cases known to still break.

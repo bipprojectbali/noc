@@ -105,15 +105,17 @@ bun install
 bun run dev          # http://127.0.0.1:7788
 ```
 
-Open the wall at **`http://wall.noc.localhost:7788/`**, not at `127.0.0.1`.
-Both addresses reach the same server, but only the first lets a framed site
-keep you signed in: panes are served through sibling addresses of that name,
-which is what stops the browser treating them as a different site and
-withholding their session cookies. No `/etc/hosts` entry is needed — Chrome
-resolves any `*.localhost` name to loopback on its own. A wall opened at
-`127.0.0.1` still works and says so in the corner; the desktop app loads the
-loopback address and does not need any of this, because its panes are real
-windows.
+Open `http://localhost:7788/` and the browser is taken on to
+**`http://wall.noc.localhost:7788/`**. Both addresses reach the same server
+and the same wall — the layout is in the database — but only the second lets
+a framed site keep you signed in: panes are served through sibling addresses
+of that name, which is what stops the browser treating them as a different
+site and withholding their session cookies. No `/etc/hosts` entry is needed —
+Chrome resolves any `*.localhost` name to loopback on its own. Add `?stay=1`
+to stay on the loopback address on purpose (sessions in panes will break
+there, which is the point of having it). A wall bound to a routable address
+is never moved, and the desktop app loads the loopback address and does not
+need any of this, because its panes are real windows.
 
 | Script | Does |
 | --- | --- |
@@ -646,6 +648,15 @@ against a site sending `X-Frame-Options: SAMEORIGIN` and
 store showed two separate host-only cookies, one per site address, which is
 cookie isolation demonstrated rather than merely unit-tested.
 
+Getting to that address is no longer the reader's job, and that was watched the
+same way. A later pair of runs typed `http://localhost:<port>/` and nothing
+else: the browser landed on `http://wall.noc.localhost:<port>/`, the pane went
+login form → signed in → **still signed in after a full reload of the wall
+page**, and `?stay=1` kept a second navigation on `127.0.0.1`. The control, the
+same wall opened with `?stay=1` and a site addressed as a genuinely different
+name, read signed out at all three points. Screenshots and logs for both are
+kept beside the earlier ones.
+
 **Not known.** Everything beyond that stand-in. No real dashboard has been
 through this path. Four things are known to be able to break it and none is
 handled: a page that builds its own links or XHR from its real origin rather
@@ -659,7 +670,14 @@ out to a third-party SSO host also leaves the proxy mid-flight, deliberately —
 rewriting a redirect to a host nobody put on the wall would turn this into an
 open relay.
 
-**One step.** Open `http://wall.noc.localhost:7788/` and point a pane at a real
-internal dashboard that bounces to login. Sign in, reload the wall, and watch
-whether the pane comes back signed in. Where it fails, the question worth
-answering first is which of the four above did it.
+One more gap belongs to the landing rather than to the session: the desktop
+app is spared the move by a `?stay=1` flag this server writes onto its own
+`noc-ready` line, and only the server's half of that has been run. The Rust
+that parses the line and opens it is untested here and was not executed, so
+"the shell is not redirected" is proved as far as the address it is handed and
+no further.
+
+**One step.** Open the wall and point a pane at a real internal dashboard that
+bounces to login. Sign in, reload the wall, and watch whether the pane comes
+back signed in. Where it fails, the question worth answering first is which of
+the four above did it.
