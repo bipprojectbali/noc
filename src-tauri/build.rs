@@ -7,6 +7,7 @@ const COMMANDS: &[&str] = &[
     "pane_webview_show",
     "pane_webview_place",
     "pane_webview_close",
+    "cookie_import",
 ];
 
 fn main() {

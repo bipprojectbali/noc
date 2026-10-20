@@ -6,7 +6,7 @@ README = produk & milestone untuk manusia. File ini = perintah, invariant, jebak
 ## Perintah
 
 - `bun install` · `bun run dev` (hot, http://127.0.0.1:7788) · `bun run start` (tanpa hot)
-- `bun test` (17 file `*.test.ts(x)` di `tests/`) · `bun run typecheck` (`tsc --noEmit`)
+- `bun test` (18 file `*.test.ts(x)` di `tests/`) · `bun run typecheck` (`tsc --noEmit`)
 - `bun run build:sidecar` → `scripts/sidecar.build.ts` menghasilkan `src-tauri/binaries/noc-server-<triple>`; triple dari `rustc --print host-tuple`
 - `bun run tauri:dev` / `tauri:build` — keduanya menjalankan `build:sidecar` lewat `beforeDevCommand`/`beforeBuildCommand`
 - `bun run build:binary` → `dist/noc` standalone, **bukan** yang dipakai Tauri
@@ -23,7 +23,7 @@ src/pane/     UI pane (tombol ⋮ + menu panel), URL, state machine load, store,
 src/persist/  port persist, client HTTP, repository SQLite, snapshot, writer
 src/resize/   splitter, aritmetika drag, seam penekan pointer
 src/server/   entrypoint, routes, probe header, ready line, parent watch
-src-tauri/src 3 file Rust (403 baris): main.rs, sidecar.rs, pane_webview.rs
+src-tauri/src 4 file Rust (570 baris): main.rs, sidecar.rs, pane_webview.rs, cookie_import.rs
 tests/        mirror src/ + tests/setup/ + tests/fixtures/
 ```
 
@@ -63,7 +63,11 @@ tests/        mirror src/ + tests/setup/ + tests/fixtures/
 
 **4. Handshake sidecar lewat stdout.** Rust men-spawn server dengan `NOC_PORT=0`, mem-parse baris `noc-ready <url>` untuk tahu port nyata, dan baru itu membuka window wall. Prefix terduplikasi sebagai literal di `src/server/server.ready.ts` dan `src-tauri/src/sidecar.rs` — **ubah keduanya bersama.** Server tidak pernah pindah port diam-diam: port terpakai = exit 1. Sidecar mengawasi `NOC_PARENT_PID` (signal 0, poll 1 s) agar tak jadi orphan; jangan andalkan parent membunuh child — force-quit tak pernah sampai ke kode itu.
 
-**5. Permukaan frontend→native hanya 3 `invoke`:** `pane_webview_show|place|close`, lewat `src/native/native.bridge.ts` saja. Tidak ada `emit`/`listen` dua arah — jangan tambahkan tanpa alasan kuat. Tiap command baru butuh entri di `src-tauri/capabilities/default.json` (wall page adalah origin remote `http://127.0.0.1:*`).
+**5. Permukaan frontend→native hanya 4 `invoke`:** `pane_webview_show|place|close` plus `cookie_import`, lewat `src/native/native.bridge.ts` saja. Tidak ada `emit`/`listen` dua arah — jangan tambahkan tanpa alasan kuat. Tiap command baru butuh **dua** entri: nama di `COMMANDS` (`src-tauri/build.rs`) yang membangkitkan permission `allow-*`, dan permission itu di `src-tauri/capabilities/default.json` — lupa yang pertama membuat build gagal dengan "Permission … not found" (wall page adalah origin remote `http://127.0.0.1:*`).
+
+- `cookie_import` (`src-tauri/src/cookie_import.rs`) menanam cookie ekspor browser ke cookie store WebKit supaya pane tak minta login ulang. Ia **global, bukan per pane**: pane dibangun dengan `WebviewBuilder` polos — tanpa `incognito`, tanpa `data_store_identifier` — jadi semua berbagi `WKWebsiteDataStore::defaultDataStore`, dan webview window wall adalah pegangan yang sama atas store itu. Sekali impor berlaku untuk seluruh dinding.
+- **Command ini membaca ulang store, dan itu bukan paranoia.** `Webview::set_cookie` fire-and-forget satu lapis di bawah: Tauri mengembalikan `Ok(())` begitu pesan masuk antrean, dan kalau WebKit menolak cookie-nya tauri-runtime-wry cuma menulis `log::error!`. Jadi yang dilaporkan adalah hasil `cookies()` sesudahnya (`stored`, `failedDomains`), bukan jumlah yang dikirim. Jangan "sederhanakan" jadi menghitung input.
+- Command-nya `async` dengan sengaja: membaca cookie store memblokir sampai WebKit menjawab, dan Tauri mendokumentasikan itu deadlock bila dilakukan dari command sinkron di Windows. Input divalidasi (`usable`) karena `NSHTTPCookie::cookieWithProperties` mengembalikan nil untuk dictionary cacat dan wry mengubah nil itu jadi `expect` — panik yang menjatuhkan shell. `SameSite::None` di-drop wry di macOS; itu batas upstream, bukan bug di sini.
 
 ## Konvensi kode
 

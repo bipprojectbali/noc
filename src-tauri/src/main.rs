@@ -1,6 +1,7 @@
 // The release build must not open a console window on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cookie_import;
 mod pane_webview;
 mod sidecar;
 
@@ -13,6 +14,7 @@ fn main() {
             pane_webview::pane_webview_show,
             pane_webview::pane_webview_place,
             pane_webview::pane_webview_close,
+            cookie_import::cookie_import,
         ])
         .setup(|app| {
             app.manage(sidecar::SidecarProcess::default());
