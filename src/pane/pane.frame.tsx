@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { isNativeHost } from "../native/native.bridge.ts";
+import { activePaneUrl } from "../layout/layout.sites.ts";
 import { isPane, type PaneId } from "../layout/layout.types.ts";
 import { PaneMenu } from "./pane.menu.tsx";
 import { paneRendererFor } from "./pane.renderer.ts";
@@ -41,6 +42,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
     return <div className="noc-error">Pane {paneId} is not in the layout.</div>;
   }
 
+  const url = activePaneUrl(node);
   const renderer = paneRendererFor(node.strategy);
   // Framing permission is an iframe problem. A native webview is a top-level
   // document, so reporting a refusal there would be reporting a limit that does
@@ -54,7 +56,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
     <section className="noc-pane" data-pane-id={paneId}>
       <PaneMenu
         paneId={paneId}
-        url={node.url}
+        url={url}
         error={error}
         strategy={node.strategy}
         nativeHost={nativeHost}
@@ -81,7 +83,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
       />
 
       <div className="noc-pane__body">
-        <renderer.Content paneId={paneId} url={node.url} load={load} />
+        <renderer.Content paneId={paneId} url={url} load={load} />
 
         {load.kind === "empty" && (
           <p

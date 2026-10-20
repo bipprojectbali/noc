@@ -93,6 +93,36 @@ export function findViolations(tree: LayoutTree): string[] {
     }
   }
 
+  // Site ids are unique wall-wide, not per pane, so the check is wall-wide too:
+  // per-site state is keyed on the id alone, and a repeat would make two sites
+  // share one frame. Docked panes count — they are still alive.
+  const seenSites = new Set<string>();
+  for (const node of Object.values(tree.nodes)) {
+    if (!isPane(node)) continue;
+    // Stored payloads reach this before they are trusted, so a pane whose
+    // `sites` is not a list has to be reported, not crashed on.
+    if (!Array.isArray(node.sites)) {
+      problems.push(`pane "${node.id}" has no site list`);
+      continue;
+    }
+    for (const site of node.sites) {
+      if (seenSites.has(site.id)) {
+        problems.push(`site "${site.id}" appears more than once`);
+      }
+      seenSites.add(site.id);
+    }
+    const active = node.activeSiteId;
+    if (node.sites.length === 0) {
+      if (active !== null) {
+        problems.push(`pane "${node.id}" holds no sites but is active on "${active}"`);
+      }
+    } else if (!node.sites.some((site) => site.id === active)) {
+      problems.push(
+        `pane "${node.id}" is active on "${active}", which is not one of its sites`,
+      );
+    }
+  }
+
   const treePaneCount = [...visits.keys()].filter((id) => {
     const node = tree.nodes[id];
     return node !== undefined && isPane(node);

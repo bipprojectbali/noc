@@ -7,7 +7,6 @@ import {
   MIN_FRACTION,
   resizeSplit,
   setPaneStrategy,
-  setPaneUrl,
   splitPane,
 } from "../../src/layout/layout.tree.ts";
 import {
@@ -17,6 +16,7 @@ import {
 } from "../../src/layout/layout.remove.ts";
 import { assertWellFormed } from "../../src/layout/layout.invariants.ts";
 import { isSplit } from "../../src/layout/layout.types.ts";
+import { paneUrl, seedUrl } from "../fixtures/pane-sites.ts";
 
 function idFactory(): () => string {
   let next = 0;
@@ -27,7 +27,8 @@ describe("createTree", () => {
   test("starts as a single empty pane that is its own root", () => {
     const tree = createTree(idFactory(), 1000);
     expect(tree.rootId).toBe("n1");
-    expect(tree.nodes.n1).toMatchObject({ kind: "pane", parentId: null, url: null });
+    expect(tree.nodes.n1).toMatchObject({ kind: "pane", parentId: null });
+    expect(paneUrl(tree, "n1")).toBeNull();
     expect(tree.dock).toEqual([]);
     assertWellFormed(tree);
   });
@@ -61,11 +62,11 @@ describe("splitPane", () => {
 
   test("preserves the url of the pane being split", () => {
     const makeId = idFactory();
-    let tree = setPaneUrl(createTree(makeId, 1), "n1", "https://example.com/");
+    let tree = seedUrl(createTree(makeId, 1), "n1", "https://example.com/");
     tree = splitPane(tree, "n1", "row", makeId, 2);
 
-    expect(tree.nodes.n1).toMatchObject({ url: "https://example.com/" });
-    expect(tree.nodes.n3).toMatchObject({ url: null });
+    expect(paneUrl(tree, "n1")).toBe("https://example.com/");
+    expect(paneUrl(tree, "n3")).toBeNull();
   });
 
   test("rejects an unknown pane id instead of silently doing nothing", () => {
@@ -112,12 +113,13 @@ describe("deletePane", () => {
 
   test("deleting the last pane leaves one fresh empty pane", () => {
     const makeId = idFactory();
-    let tree = setPaneUrl(createTree(makeId, 1), "n1", "https://example.com/");
+    let tree = seedUrl(createTree(makeId, 1), "n1", "https://example.com/");
     tree = deletePane(tree, "n1", makeId, 2);
 
     expect(tree.nodes.n1).toBeUndefined();
     expect(listTreePaneIds(tree)).toEqual(["n2"]);
-    expect(tree.nodes.n2).toMatchObject({ kind: "pane", url: null, parentId: null });
+    expect(tree.nodes.n2).toMatchObject({ kind: "pane", parentId: null });
+    expect(paneUrl(tree, "n2")).toBeNull();
     assertWellFormed(tree);
   });
 
@@ -138,12 +140,13 @@ describe("dockPane and undockPane", () => {
   test("docking lifts the pane out of the tree but keeps its node alive", () => {
     const makeId = idFactory();
     let tree = splitPane(createTree(makeId, 1), "n1", "row", makeId, 2);
-    tree = setPaneUrl(tree, "n3", "https://info.cern.ch/");
+    tree = seedUrl(tree, "n3", "https://info.cern.ch/");
     tree = dockPane(tree, "n3", makeId, 5);
 
     expect(isDocked(tree, "n3")).toBe(true);
     expect(tree.dock).toEqual([{ paneId: "n3", dockedAt: 5 }]);
-    expect(tree.nodes.n3).toMatchObject({ url: "https://info.cern.ch/", parentId: null });
+    expect(tree.nodes.n3).toMatchObject({ parentId: null });
+    expect(paneUrl(tree, "n3")).toBe("https://info.cern.ch/");
     expect(listTreePaneIds(tree)).toEqual(["n1"]);
     assertWellFormed(tree);
   });
@@ -170,13 +173,13 @@ describe("dockPane and undockPane", () => {
   test("undocking reinserts the pane by splitting the host", () => {
     const makeId = idFactory();
     let tree = splitPane(createTree(makeId, 1), "n1", "row", makeId, 2);
-    tree = setPaneUrl(tree, "n3", "https://www.wikipedia.org/");
+    tree = seedUrl(tree, "n3", "https://www.wikipedia.org/");
     tree = dockPane(tree, "n3", makeId, 3);
     tree = undockPane(tree, "n3", "n1", "column", makeId);
 
     expect(tree.dock).toEqual([]);
     // The restored pane keeps its url: docking never destroyed it.
-    expect(tree.nodes.n3).toMatchObject({ url: "https://www.wikipedia.org/" });
+    expect(paneUrl(tree, "n3")).toBe("https://www.wikipedia.org/");
     expect(listTreePaneIds(tree)).toEqual(["n1", "n3"]);
     assertWellFormed(tree);
   });
@@ -204,16 +207,16 @@ describe("setPaneStrategy", () => {
   test("changes only the one pane's strategy and keeps the rest of it", () => {
     const makeId = idFactory();
     let tree = splitPane(createTree(makeId, 1), "n1", "row", makeId, 2);
-    tree = setPaneUrl(tree, "n1", "https://example.com/");
+    tree = seedUrl(tree, "n1", "https://example.com/");
 
     tree = setPaneStrategy(tree, "n1", "webview");
 
     expect(tree.nodes.n1).toMatchObject({
       kind: "pane",
       strategy: "webview",
-      url: "https://example.com/",
       createdAt: 1,
     });
+    expect(paneUrl(tree, "n1")).toBe("https://example.com/");
     // Siblings keep the default: the choice is per pane, not per wall.
     expect(tree.nodes.n3).toMatchObject({ strategy: "auto" });
     assertWellFormed(tree);
