@@ -7,6 +7,22 @@ export type PaneId = NodeId;
 export type SplitDirection = "row" | "column";
 
 /**
+ * Which edge of a host pane an incoming pane lands on. A drop target is an edge,
+ * not a direction plus a slot index, so the two are derived from it rather than
+ * passed around separately and risking a mismatch.
+ */
+export type PaneSide = "left" | "right" | "top" | "bottom";
+
+export function sideToDirection(side: PaneSide): SplitDirection {
+  return side === "left" || side === "right" ? "row" : "column";
+}
+
+/** True when the incoming pane takes the first child slot of the new split. */
+export function sideIsLeading(side: PaneSide): boolean {
+  return side === "left" || side === "top";
+}
+
+/**
  * Which renderer serves a pane. Resolved per pane because the wall mixes
  * internal dashboards (plain iframe) with sites that refuse framing.
  */
