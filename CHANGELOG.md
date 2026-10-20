@@ -4,6 +4,37 @@
 
 ### Added
 
+- A pane can hold several pages instead of one, and stepping between them is
+  not a load. Every page a pane holds stays mounted; the one you step away
+  from is hidden, so it comes back with its scroll, its session and its open
+  connections intact. Add a page from the address field in a pane's ⋮ panel,
+  which also lists by name every page that pane holds and is the only place
+  one can be dropped. The switch itself sits on the pane beside ⋮, in the same
+  shape ⋮ takes — floating over a framed pane, seated in the seam of a native
+  one: up to four pages it is one dot each, and clicking a dot shows that page
+  and says which one is on screen; past four it becomes a `3/8` chip that
+  steps to the next page and wraps, because dots that small stop being
+  something a pointer can hit on a narrow pane. A pane holding one page shows
+  no switch at all. A saved wall keeps every page of every pane, and a wall
+  saved before this opens with the address it had as its first page. Built and
+  unit-tested; the control has never been on screen, and what a wall of a
+  dozen live pages costs has not been measured — see "Open items" in the
+  README.
+
+- A site on the wall can reach the camera and the microphone. One using
+  `getUserMedia` used to report "device not found" in a loop, which was not a
+  refusal: it was asking a context that had never been allowed to ask, so it
+  was handed no devices to find. Framed panes are now allowed to ask for both.
+  For the desktop app the answer was a layer lower — macOS hands no devices
+  at all to an app that does not declare why it wants them — so the app now
+  declares it and carries the entitlements signing needs. Those only exist in
+  a built app: `bun run tauri:dev` does not make one, so capture will keep
+  failing there and that failure means nothing. Nothing has yet seen a device
+  arrive, or a macOS prompt appear, under either renderer; see "Open items".
+  Note while this is new: any page on the wall may ask, there is no per-pane
+  switch for it, and inside the desktop app the request is granted without
+  asking you.
+
 - Rearrange the wall by dragging a pane. The handle is the same ⋮ the menu
   hangs from: press it and let go and you get the menu as before, press it and
   move and you are carrying the pane. Drop it against the left, right, top or
@@ -83,6 +114,16 @@
 
 ### Fixed
 
+- Reloading the wall no longer throws away where a pane had got to. In the
+  desktop app, every pane was sent back to the address it was stored with the
+  moment the wall page reloaded, so a pane you had just signed into came back
+  showing a login form — which reads as a broken login rather than as a
+  reload, since nothing on screen says the wall was the thing that reloaded. A
+  pane is now left on the page it is already showing, and only moved. This is
+  the desktop app only: a framed pane bounces for a different reason, one that
+  belongs to the site being framed. Nothing has watched it hold yet — see
+  "Open items" in the README.
+
 - The wheel now stays inside the pane it is used over. A pane whose page fits
   on screen has nothing left to scroll, and the wheel then chained out of the
   pane to the wall behind it, where macOS answered it with an elastic bounce
@@ -120,6 +161,18 @@
 
 - Closing a pane now releases what it held for its position on the wall,
   instead of keeping it until the app exits.
+
+### Removed
+
+- The wall no longer claims to remember a page you navigated to inside a pane
+  yourself. It was stored beside the pane's own address and preferred over it
+  on the way back in, but the two could never differ: the only address the
+  wall ever learns is the one it set, and a page that navigates inside a pane
+  does so where nothing here can see it. The whole path is gone rather than
+  left reading like a feature that works. What this changes for you: nothing
+  that ever happened — a pane comes back on the address it holds, exactly as
+  before. In the desktop app, the page a pane is showing now survives a wall
+  reload for a real reason instead; see "Fixed" above.
 
 ## [0.2.0] - 2026-10-19
 
