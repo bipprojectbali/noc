@@ -13,7 +13,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { serializeLayout } from "../../src/layout/layout.serializer.ts";
-import { addSite, setActiveSite } from "../../src/layout/layout.sites.ts";
+import {
+  addSite,
+  setActiveSite,
+  setSiteZoom,
+} from "../../src/layout/layout.sites.ts";
 import { createTree, splitPane } from "../../src/layout/layout.tree.ts";
 import { isPane, type LayoutTree, type PaneId } from "../../src/layout/layout.types.ts";
 import { migrate, openWallDatabase } from "../../src/persist/persist.database.ts";
@@ -148,6 +152,60 @@ describe("a pane's sites survive a restart", () => {
       "https://right.example/",
     ]);
   });
+
+  test("each site keeps its own magnification", () => {
+    let counter = 0;
+    const makeId = () => `n${(counter += 1)}`;
+    let tree = createTree(makeId, 1000);
+    const paneId = tree.rootId;
+    tree = addSite(tree, paneId, "https://dense.example/", makeId, 1100);
+    tree = addSite(tree, paneId, "https://sparse.example/", makeId, 1200);
+    const [dense, sparse] = paneOf(tree, paneId).sites;
+    if (dense === undefined || sparse === undefined) throw new Error("expected two");
+    tree = setSiteZoom(tree, paneId, dense.id, 0.5);
+    tree = setSiteZoom(tree, paneId, sparse.id, 1.75);
+
+    const first = openFile(1);
+    createWallRepository(first.db, () => 2).saveWall({
+      layout: serializeLayout(tree),
+      settings: { ...DEFAULT_WALL_SETTINGS },
+    });
+    first.db.close();
+
+    const second = openFile(3);
+    const loaded = createWallRepository(second.db, () => 4).loadWall();
+    second.db.close();
+
+    // The whole reason the column exists: a wall reloaded overnight comes back
+    // readable from the same distance it was left at.
+    expect(
+      paneOf(loaded?.layout.tree as LayoutTree, paneId).sites.map((s) => s.zoom),
+    ).toEqual([0.5, 1.75]);
+  });
+
+  test("a zoom the file should not contain is pulled back, not rendered", () => {
+    let counter = 0;
+    const makeId = () => `n${(counter += 1)}`;
+    let tree = createTree(makeId, 1000);
+    const paneId = tree.rootId;
+    tree = addSite(tree, paneId, "https://one.example/", makeId, 1100);
+
+    const opened = openFile(1);
+    const repository = createWallRepository(opened.db, () => 2);
+    repository.saveWall({
+      layout: serializeLayout(tree),
+      settings: { ...DEFAULT_WALL_SETTINGS },
+    });
+    // `REAL` holds whatever it is handed, and this file is a plain SQLite one
+    // on the operator's disk. Left alone, 400 is a page with no way back.
+    opened.db.run("UPDATE pane_sites SET zoom = 400");
+    const loaded = repository.loadWall();
+    opened.db.close();
+
+    expect(
+      paneOf(loaded?.layout.tree as LayoutTree, paneId).sites.map((s) => s.zoom),
+    ).toEqual([2]);
+  });
 });
 
 /**
@@ -193,7 +251,7 @@ describe("a wall stored by the version 1 schema still opens", () => {
     seedVersion1Database(dbPath);
 
     const opened = openFile(10);
-    expect(opened.version).toBe(2);
+    expect(opened.version).toBe(3);
     const loaded = createWallRepository(opened.db, () => 11).loadWall();
 
     const stamp = opened.db
@@ -210,6 +268,9 @@ describe("a wall stored by the version 1 schema still opens", () => {
         id: "pane-a-s1",
         url: "https://grafana.internal/d/one",
         createdAt: 1000,
+        // The 2 → 3 step added the column with a default rather than
+        // backfilling it, so a site stored before zoom existed is at 100%.
+        zoom: 1,
       },
     ]);
     expect(migrated.activeSiteId).toBe("pane-a-s1");
@@ -219,9 +280,9 @@ describe("a wall stored by the version 1 schema still opens", () => {
     // A pane that never held an address gets no site rather than an empty one.
     expect(paneOf(tree, "pane-b").sites).toEqual([]);
     expect(paneOf(tree, "pane-b").activeSiteId).toBeNull();
-    // The rows now describe a version 2 tree, so the stamp has to agree or the
-    // next read re-runs the 1 → 2 tree migration and wipes what it restored.
-    expect(stamp?.layout_version).toBe(2);
+    // The rows now describe a version 3 tree, so the stamp has to agree or the
+    // next read re-runs the tree migrations and wipes what it restored.
+    expect(stamp?.layout_version).toBe(3);
   });
 
   test("the migrated wall can then grow sites and still round-trips", () => {
@@ -252,7 +313,7 @@ describe("a wall stored by the version 1 schema still opens", () => {
     // Forcing the version row back is the state an interrupted upgrade leaves:
     // the table is there, the row says it is not.
     opened.db.run("UPDATE schema_version SET version = 1 WHERE id = 1");
-    expect(migrate(opened.db, 20)).toBe(2);
+    expect(migrate(opened.db, 20)).toBe(3);
 
     const sites = opened.db
       .query<{ site_id: string; position: number }, []>(
@@ -262,5 +323,28 @@ describe("a wall stored by the version 1 schema still opens", () => {
     opened.db.close();
 
     expect(sites).toEqual([{ site_id: "pane-a-s1", position: 0 }]);
+  });
+
+  test("replaying the zoom step neither fails nor forgets what was stored", () => {
+    seedVersion1Database(dbPath);
+
+    const opened = openFile(10);
+    opened.db.run("UPDATE pane_sites SET zoom = 1.5 WHERE pane_id = 'pane-a'");
+    // The same interrupted-upgrade state, one step further on. SQLite has no
+    // `ADD COLUMN IF NOT EXISTS`, so without the step's `addsColumn` guard this
+    // throws "duplicate column name" and the wall never opens again.
+    opened.db.run("UPDATE schema_version SET version = 2 WHERE id = 1");
+    expect(migrate(opened.db, 20)).toBe(3);
+
+    const row = opened.db
+      .query<{ zoom: number }, []>(
+        "SELECT zoom FROM pane_sites WHERE pane_id = 'pane-a'",
+      )
+      .get();
+    opened.db.close();
+
+    // Skipping the step must not mean re-running it with the column default:
+    // that would quietly reset every magnified page on the wall.
+    expect(row?.zoom).toBe(1.5);
   });
 });

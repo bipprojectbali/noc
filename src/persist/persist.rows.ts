@@ -31,19 +31,21 @@ import {
   type SplitDirection,
   type SplitNode,
 } from "../layout/layout.types.ts";
+import { clampZoom } from "../layout/layout.zoom.ts";
 import type { WallSnapshot } from "./persist.types.ts";
 
 /** A snapshot without the wall-wide settings, which are not stored per layout. */
 export type StoredLayout = Omit<WallSnapshot, "settings">;
 
 /**
- * The tree shape these rows express. Since schema 2 that is version 2: a pane's
- * sites each have a row, in order, with one of them flagged active. The
- * `layouts.layout_version` column records the version the rows were written at,
- * and the schema step that moved them forward re-stamped it — so a read never
- * runs a tree migration over rows that have already had it applied.
+ * The tree shape these rows express. Since schema 3 that is version 3: a pane's
+ * sites each have a row, in order, with one of them flagged active and each one
+ * carrying how much its page is magnified. The `layouts.layout_version` column
+ * records the version the rows were written at, and the schema step that moved
+ * them forward re-stamped it — so a read never runs a tree migration over rows
+ * that have already had it applied.
  */
-const ROW_TREE_VERSION = 2;
+const ROW_TREE_VERSION = 3;
 
 type LayoutRow = { root_id: string; layout_version: number };
 type PaneRow = {
@@ -59,6 +61,7 @@ type PaneSiteRow = {
   url: string;
   created_at: number;
   is_active: number;
+  zoom: number;
 };
 type SplitRow = {
   id: string;
@@ -82,7 +85,7 @@ function readSites(db: Database, layoutId: string): Map<PaneId, HeldSites> {
   const byPane = new Map<PaneId, HeldSites>();
   for (const row of db
     .query<PaneSiteRow, [string]>(
-      `SELECT pane_id, site_id, url, created_at, is_active
+      `SELECT pane_id, site_id, url, created_at, is_active, zoom
        FROM pane_sites WHERE layout_id = ? ORDER BY pane_id, position`,
     )
     .all(layoutId)) {
@@ -91,7 +94,15 @@ function readSites(db: Database, layoutId: string): Map<PaneId, HeldSites> {
       entry = { sites: [], activeSiteId: null };
       byPane.set(row.pane_id, entry);
     }
-    entry.sites.push({ id: row.site_id, url: row.url, createdAt: row.created_at });
+    entry.sites.push({
+      id: row.site_id,
+      url: row.url,
+      createdAt: row.created_at,
+      // `REAL` is whatever SQLite was handed, and a file edited by hand can
+      // hand it anything. Clamped on the way in so an unusable number never
+      // reaches a render; `assertWellFormed` would reject the whole wall.
+      zoom: clampZoom(row.zoom),
+    });
     if (row.is_active === 1) entry.activeSiteId = row.site_id;
   }
   return byPane;
@@ -196,8 +207,8 @@ export function writeLayout(
   );
   const insertSite = db.query(
     `INSERT INTO pane_sites (layout_id, pane_id, site_id, position, url,
-                             created_at, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                             created_at, is_active, zoom)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insertSplit = db.query(
     `INSERT INTO splits (id, layout_id, parent_id, direction, child_a, child_b,
@@ -225,6 +236,7 @@ export function writeLayout(
           site.url,
           site.createdAt,
           site.id === node.activeSiteId ? 1 : 0,
+          site.zoom,
         );
       });
     } else {
