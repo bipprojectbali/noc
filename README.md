@@ -105,6 +105,16 @@ bun install
 bun run dev          # http://127.0.0.1:7788
 ```
 
+Open the wall at **`http://wall.noc.localhost:7788/`**, not at `127.0.0.1`.
+Both addresses reach the same server, but only the first lets a framed site
+keep you signed in: panes are served through sibling addresses of that name,
+which is what stops the browser treating them as a different site and
+withholding their session cookies. No `/etc/hosts` entry is needed — Chrome
+resolves any `*.localhost` name to loopback on its own. A wall opened at
+`127.0.0.1` still works and says so in the corner; the desktop app loads the
+loopback address and does not need any of this, because its panes are real
+windows.
+
 | Script | Does |
 | --- | --- |
 | `bun run dev` | Dev server with hot reload |
@@ -586,3 +596,42 @@ frontend says it where it should is tested; what the shell does with it is not.
 **One step.** `bun run tauri:dev`, sign into a site in a native pane, then
 Cmd-R the wall page: the pane must stay on the page it was showing. Then press
 Reload in that pane's menu and confirm the page really is fetched again.
+
+### 12. A framed pane keeps its session, but only a stand-in has proved it
+
+**Known.** This one was watched in a real browser, which is rare here, so what
+is known is unusually concrete. A framed site could not hold a login, and no
+amount of client code could change it: a cookie with no `SameSite` is treated
+as `Lax`, and the browser computes "site" from the top-level document, so a
+framed site on its own domain accepted `Set-Cookie` and then sent every later
+request without it. The only move left inside the app was to stop being
+cross-site — the wall now answers on `wall.noc.localhost` and serves each site
+through a sibling of that name, which the browser counts as the same site.
+
+Three runs, same wall, same site, in Chrome 155 against a throwaway profile,
+screenshots kept: through the proxy the pane went from a login form, to signed
+in, to **still signed in after a full reload of the wall page**; the control
+run with the wall opened at `127.0.0.1` sat on the login form at all three
+points, and the browser had stored no cookie for that host at all; a third run
+against a site sending `X-Frame-Options: SAMEORIGIN` and
+`frame-ancestors 'none'` framed and signed in normally. Chrome's own cookie
+store showed two separate host-only cookies, one per site address, which is
+cookie isolation demonstrated rather than merely unit-tested.
+
+**Not known.** Everything beyond that stand-in. No real dashboard has been
+through this path. Four things are known to be able to break it and none is
+handled: a page that builds its own links or XHR from its real origin rather
+than from `location` steps off the same-site path, and nothing rewrites
+response bodies; a site that validates `Origin` or `Referer` strictly may
+answer with a CSRF error, which looks exactly like the login bounce this was
+built to cure; an authenticated WebSocket is proved only as far as an echo
+demo; and service workers, whose scope is per origin and would therefore
+register under the proxy address, have not been touched. A login that bounces
+out to a third-party SSO host also leaves the proxy mid-flight, deliberately —
+rewriting a redirect to a host nobody put on the wall would turn this into an
+open relay.
+
+**One step.** Open `http://wall.noc.localhost:7788/` and point a pane at a real
+internal dashboard that bounces to login. Sign in, reload the wall, and watch
+whether the pane comes back signed in. Where it fails, the question worth
+answering first is which of the four above did it.
