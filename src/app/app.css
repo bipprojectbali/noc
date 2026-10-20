@@ -47,6 +47,16 @@ body {
   color: var(--noc-danger);
 }
 
+/* The wall column. The shell takes whatever height the dock strip leaves, so a
+   docked pane's entry is never covered by a pane — a native webview would paint
+   straight over it. */
+.noc-wall {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 /* Shared coordinate space for both layers. Pane hosts are positioned against
    this box, so it must be the containing block. */
 .noc-shell {
@@ -266,6 +276,41 @@ body.noc-no-pane-cursor .noc-pane-host {
 
 .noc-pane__button--danger {
   color: var(--noc-danger);
+}
+
+/* Outside the shell on purpose — see `pane.dock.tsx`. */
+.noc-dock {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--noc-chrome);
+  border-top: 1px solid var(--noc-border);
+}
+
+.noc-dock__label {
+  color: var(--noc-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+
+.noc-dock__entry {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--noc-border);
+  border-radius: 4px;
+}
+
+.noc-dock__title {
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .noc-error {
