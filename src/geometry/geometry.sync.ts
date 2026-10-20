@@ -91,16 +91,21 @@ export function syncPaneGeometry(
     const rect = toLayerRect(slot, containerRect);
     const visible = !isEmptyRect(rect);
     host.style.visibility = visible ? "visible" : "hidden";
-    // Reported even when the rect is unchanged: a renderer outside the DOM may
-    // have its own reasons to be out of step, and it dedupes for itself.
-    place?.(paneId, visible);
-    if (rectsEqual(rect, registry.lastRect(paneId))) continue;
 
-    for (const [property, value] of Object.entries(rectToStyle(rect))) {
-      host.style.setProperty(property, value);
+    if (!rectsEqual(rect, registry.lastRect(paneId))) {
+      for (const [property, value] of Object.entries(rectToStyle(rect))) {
+        host.style.setProperty(property, value);
+      }
+      registry.setLastRect(paneId, rect);
+      moved.push(paneId);
     }
-    registry.setLastRect(paneId, rect);
-    moved.push(paneId);
+
+    // Last, and these lines do not commute. A renderer outside the DOM measures
+    // an anchor that rides inside this host, so told first it would read the
+    // transform from before the move and place the webview one frame behind.
+    // Reported even when the rect is unchanged: such a renderer may be out of
+    // step for its own reasons, and it dedupes for itself.
+    place?.(paneId, visible);
   }
 
   return { moved, unplaced };

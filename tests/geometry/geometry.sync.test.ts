@@ -13,6 +13,8 @@ import {
   syncPaneGeometry,
   type RectReader,
 } from "../../src/geometry/geometry.sync.ts";
+import type { NativeRect } from "../../src/native/native.bridge.ts";
+import { createPaneWebviewRenderer } from "../../src/pane/pane.webview-renderer.ts";
 
 describe("rect maths", () => {
   test("converts a viewport rect into layer coordinates", () => {
@@ -170,6 +172,65 @@ describe("syncPaneGeometry", () => {
     expect(result.unplaced).toEqual([]);
   });
 
+  test("writes the host's rect before reporting placement", () => {
+    // These two steps look swappable and are not: a renderer outside the DOM
+    // measures a box inside the host, so told first it reads the old transform.
+    const { container, registry, hosts } = scene(["p1"], ["p1"]);
+    const read = readerFor(
+      {
+        container: { left: 0, top: 0, width: 800, height: 600 },
+        p1: { left: 400, top: 0, width: 400, height: 600 },
+      },
+      container,
+    );
+
+    const seen: string[] = [];
+    syncPaneGeometry(container, registry, read, (paneId) => {
+      seen.push(hosts.get(paneId)!.style.transform);
+    });
+
+    expect(seen).toEqual(["translate(400px, 0px)"]);
+  });
+
+  test("reports placement at the new rect when two equal panes swap places", () => {
+    // The case nothing else catches: neither pane changes size, so a
+    // ResizeObserver on the slots never fires a correcting second sync.
+    const { container, registry, hosts } = scene(["p1", "p2"], ["p1", "p2"]);
+    const before = {
+      container: { left: 0, top: 0, width: 800, height: 600 },
+      p1: { left: 0, top: 0, width: 400, height: 600 },
+      p2: { left: 400, top: 0, width: 400, height: 600 },
+    };
+    syncPaneGeometry(container, registry, readerFor(before, container));
+
+    const swapped = { ...before, p1: before.p2, p2: before.p1 };
+    const seen = new Map<string, string>();
+    syncPaneGeometry(container, registry, readerFor(swapped, container), (paneId) => {
+      seen.set(paneId, hosts.get(paneId)!.style.transform);
+    });
+
+    expect(seen.get("p1")).toBe("translate(400px, 0px)");
+    expect(seen.get("p2")).toBe("translate(0px, 0px)");
+  });
+
+  test("still reports placement for a pane whose rect did not change", () => {
+    const { container, registry } = scene(["p1"], ["p1"]);
+    const read = readerFor(
+      {
+        container: { left: 0, top: 0, width: 800, height: 600 },
+        p1: { left: 0, top: 0, width: 800, height: 600 },
+      },
+      container,
+    );
+
+    const seen: boolean[] = [];
+    const place = (_id: string, visible: boolean) => void seen.push(visible);
+    syncPaneGeometry(container, registry, read, place);
+    syncPaneGeometry(container, registry, read, place);
+
+    expect(seen).toEqual([true, true]);
+  });
+
   test("skips a pane whose host element has been detached", () => {
     const { container, registry } = scene(["p1"], ["p1"]);
     registry.registerHost("p1", null);
@@ -182,5 +243,64 @@ describe("syncPaneGeometry", () => {
       moved: [],
       unplaced: [],
     });
+  });
+});
+
+/**
+ * The native path end to end, because the ordering above only matters for it.
+ *
+ * happy-dom measures everything as zero, so the anchor's rect is derived from
+ * the transform its host carries — which is what a browser would report, and is
+ * the whole point: the anchor rides inside the host that `syncPaneGeometry`
+ * moves, so it reads whatever transform was written last.
+ */
+describe("sync into the webview renderer", () => {
+  test("the rect sent to the shell is the pane's new one, not its old one", () => {
+    const { container, registry, hosts } = scene(["p1", "p2"], ["p1", "p2"]);
+
+    const placed: { paneId: string; x: number }[] = [];
+    const bridge = {
+      show: () => Promise.resolve(),
+      place: (paneId: string, rect: NativeRect) => {
+        placed.push({ paneId, x: rect.x });
+        return Promise.resolve();
+      },
+      close: () => Promise.resolve(),
+    };
+
+    const renderer = createPaneWebviewRenderer({
+      bridge,
+      // The anchor sits inside the host, so it moves with the host's transform.
+      readRect: (anchor) => {
+        const host = anchor.parentElement!;
+        const match = /translate\((-?\d+)px/.exec(host.style.transform);
+        return { x: Number(match?.[1] ?? 0), y: 0, width: 400, height: 600 };
+      },
+    });
+
+    for (const paneId of ["p1", "p2"]) {
+      const anchor = document.createElement("div");
+      hosts.get(paneId)!.appendChild(anchor);
+      renderer.setUrl(paneId, `https://${paneId}.example`);
+      renderer.registerAnchor(paneId, anchor);
+    }
+
+    const before = {
+      container: { left: 0, top: 0, width: 800, height: 600 },
+      p1: { left: 0, top: 0, width: 400, height: 600 },
+      p2: { left: 400, top: 0, width: 400, height: 600 },
+    };
+    const place = (paneId: string, visible: boolean) =>
+      renderer.place(paneId, visible);
+    syncPaneGeometry(container, registry, readerFor(before, container), place);
+
+    placed.length = 0;
+    const swapped = { ...before, p1: before.p2, p2: before.p1 };
+    syncPaneGeometry(container, registry, readerFor(swapped, container), place);
+
+    expect(placed).toEqual([
+      { paneId: "p1", x: 400 },
+      { paneId: "p2", x: 0 },
+    ]);
   });
 });
