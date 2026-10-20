@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Merged into the generated Info.plist by the Tauri CLI, which looks for this
+  file by name next to tauri.conf.json. No config key points at it.
+
+  Why it has to exist: macOS hands no capture device to a process whose bundle
+  does not say what it wants one for. TCC does not refuse loudly — the webview
+  simply enumerates zero devices, and the page reports "device not found"
+  rather than "permission denied". That is the whole difference between a user
+  who declined a prompt and a prompt that was never allowed to appear.
+
+  This covers the OS layer only. The WKWebView layer is already permissive:
+  wry 0.57 implements requestMediaCapturePermissionForOrigin and, with no
+  handler registered, answers WKPermissionDecision::Grant. See the report in
+  src-tauri/src/pane_webview.rs.
+
+  `tauri dev` builds no bundle at all, so none of this applies there — only
+  `tauri build` can be used to check it.
+-->
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>A site you opened in a pane is asking for the camera.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>A site you opened in a pane is asking for the microphone.</string>
+</dict>
+</plist>

@@ -9,6 +9,23 @@
 //! A webview is created once per pane and then only moved, hidden or navigated.
 //! Destroying and rebuilding one would reload the page, which is the single
 //! thing the wall's design exists to prevent.
+//!
+//! Camera and microphone need nothing here, and that is worth writing down
+//! because the obvious guess is wrong. wry 0.57 implements WKUIDelegate's
+//! `webView:requestMediaCapturePermissionForOrigin:…`, and when no permission
+//! handler is registered it answers `WKPermissionDecision::Grant`
+//! (`wry/src/wkwebview/class/wry_web_view_ui_delegate.rs`). Tauri only installs
+//! a handler if the app sets one, so a plain `WebviewBuilder` already allows
+//! capture. What blocks it is one layer lower: without the usage strings in
+//! `src-tauri/Info.plist` macOS hands the process no devices at all, and the
+//! page reports "device not found" rather than a refusal.
+//!
+//! The consequence of that default is that a pane gets the camera without
+//! asking anyone. If that is ever not wanted, the knob is
+//! `tauri::Builder::on_permission_request` in `main.rs` — returning
+//! `PermissionResponse::Default` leaves the decision to WebKit's own prompt.
+//! Not done here: nobody has yet seen whether WKWebView renders that prompt in
+//! a child webview, and guessing wrong turns a silent grant into a silent deny.
 
 use serde::Deserialize;
 use tauri::webview::WebviewBuilder;
