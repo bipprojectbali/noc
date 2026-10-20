@@ -1,3 +1,4 @@
+import { isNativeHost } from "../native/native.bridge.ts";
 import { isPane, type PaneId } from "../layout/layout.types.ts";
 import { PaneControls } from "./pane.controls.tsx";
 import { paneRendererFor } from "./pane.renderer.ts";
@@ -27,6 +28,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
   const splitPane = useWallStore((state) => state.splitPane);
   const dockPane = useWallStore((state) => state.dockPane);
   const deletePane = useWallStore((state) => state.deletePane);
+  const setPaneStrategy = useWallStore((state) => state.setPaneStrategy);
 
   if (node === undefined || !isPane(node)) {
     return <div className="noc-error">Pane {paneId} is not in the layout.</div>;
@@ -37,6 +39,9 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
   // document, so reporting a refusal there would be reporting a limit that does
   // not exist for this pane.
   const framingApplies = renderer.kind === "iframe";
+  // The renderer that escapes framing is a native view: in a browser there is
+  // nothing to switch to, and saying so beats offering a way out that is not one.
+  const nativeHost = isNativeHost();
 
   return (
     <section className="noc-pane" data-pane-id={paneId}>
@@ -45,8 +50,11 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
           paneId={paneId}
           url={node.url}
           error={error}
+          strategy={node.strategy}
+          nativeHost={nativeHost}
           onSubmit={(raw) => submitUrl(paneId, raw)}
           onReload={() => reloadPane(paneId)}
+          onStrategyChange={(strategy) => setPaneStrategy(paneId, strategy)}
           onHide={() => setUrlBarVisible(paneId, false)}
         />
       )}
@@ -76,8 +84,9 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
               <strong>{new URL(load.url).host} refuses to be framed.</strong>
               <div className="noc-pane__reason">{load.reason}</div>
               <div className="noc-pane__reason">
-                Allow this origin in the target's own headers, or give this pane the
-                native webview renderer.
+                {nativeHost
+                  ? "Allow this origin in the target's own headers, or set this pane's renderer to Webview in the URL bar — a native webview is a top-level document, and the switch reloads the page."
+                  : "Allow this origin in the target's own headers. The renderer this cannot refuse is a native webview, and that exists only in the desktop app."}
               </div>
             </div>
           </div>

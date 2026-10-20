@@ -65,6 +65,27 @@ export function paneRendererFor(strategy: PaneStrategy): PaneRenderer {
 }
 
 /**
+ * What changing a pane's strategy actually costs, decided in one place because
+ * both facts are easy to get wrong.
+ *
+ * `changed` is false whenever the host collapses two strategies onto the same
+ * renderer — `auto` and `webview` are the same thing in the shell, and every
+ * strategy is an iframe in a browser — and then nothing should happen at all.
+ *
+ * `releases` marks the direction that leaks: a native webview is not in the DOM,
+ * so React unmounting the pane's content leaves it alive, painting over the wall
+ * at OS level. It has to be destroyed explicitly by whoever switches away.
+ */
+export function rendererChange(
+  before: PaneStrategy,
+  after: PaneStrategy,
+): { changed: boolean; releases: boolean } {
+  const from = paneRendererFor(before).kind;
+  const to = paneRendererFor(after).kind;
+  return { changed: from !== to, releases: from === "webview" && to !== "webview" };
+}
+
+/**
  * Applied to every renderer rather than the pane's own: these are cheap no-ops
  * for a renderer that is not serving the pane, and it keeps the layer that syncs
  * geometry from having to know which renderer any pane ended up with.

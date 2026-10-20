@@ -195,6 +195,14 @@ body.noc-resizing .noc-pane__frame {
   cursor: pointer;
 }
 
+/* A select sizes itself to its widest option, and the renderer labels carry
+   their own warnings, so left alone this would push the URL input out of a
+   narrow pane. Capped here; the full wording is still readable in the open
+   list, which is where the choice is actually made. */
+.noc-pane__select {
+  max-width: 16ch;
+}
+
 /* Frame and status share one grid cell instead of being stacked with absolute
    positioning, so the frame keeps its box while hidden and the status can take
    the slot without being painted over. */
