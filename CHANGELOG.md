@@ -4,15 +4,16 @@
 
 ### Added
 
-- Controls on every pane, behind one thin strip. The strip shows the site's
-  host — or "Empty" — and a ⋮ button; the button opens a panel with the
-  address field, Reload, the renderer picker, Split right, Split down and
-  Close. Right-click on the strip, or anywhere in an empty pane, opens the
-  same menu. Right-click over a loaded page cannot: a framed site keeps the
-  event to itself, and a native pane takes it before the app sees it. The
-  strip is deliberately small, because a wall is meant to hold many panes and
-  every pane pays for its own chrome. Built and unit-tested, not yet seen on
-  screen; see "Open items" in the README.
+- Controls on every pane, behind a ⋮ button that costs the pane no space. On
+  a pane drawn as an iframe the button floats over the page itself and fades
+  in when the pointer is over that pane, so a wall at rest shows nothing but
+  the sites on it. Only a pane really drawn as a native webview keeps a thin
+  seam, because an OS-level view cannot be drawn over; a wall can hold both
+  kinds at once. The button opens a dropdown with the address field, Reload,
+  the renderer picker, Split right, Split down and Close. Right-click on the
+  button opens the same menu, as does right-click anywhere in an empty pane.
+  Right-click over a loaded page cannot: a framed site keeps the event to
+  itself, and a native pane takes it before the app sees it.
 
 - While a pane's menu is open, every pane drawn as a native webview goes
   blank, and comes back when the menu closes. This is how the menu is able to
