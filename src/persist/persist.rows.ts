@@ -9,19 +9,39 @@
 import type { Database } from "bun:sqlite";
 
 import { parseLayout, serializeLayout } from "../layout/layout.serializer.ts";
+import { activePaneUrl } from "../layout/layout.sites.ts";
 import {
   isPane,
-  type LayoutNode,
-  type LayoutTree,
   type NodeId,
   type PaneId,
   type PaneStrategy,
   type SplitDirection,
+  type SplitNode,
 } from "../layout/layout.types.ts";
 import type { WallSnapshot } from "./persist.types.ts";
 
 /** A snapshot without the wall-wide settings, which are not stored per layout. */
 export type StoredLayout = Omit<WallSnapshot, "settings">;
+
+/**
+ * The tree shape these rows can express. `panes` carries one `home_url` column
+ * and nothing else, so a row set *is* a version 1 tree whatever the live shape
+ * has become; `parseLayout` migrates it forward on the way out. A pane holding
+ * several sites therefore persists only the one it is showing. Bump this
+ * together with the schema step that gives sites a table of their own.
+ */
+const ROW_TREE_VERSION = 1;
+
+/** A pane as the columns describe it: the v1 node, before sites existed. */
+type RowPaneNode = {
+  id: NodeId;
+  kind: "pane";
+  parentId: NodeId | null;
+  url: string | null;
+  urlBarVisible: boolean;
+  strategy: PaneStrategy;
+  createdAt: number;
+};
 
 type LayoutRow = { root_id: string; layout_version: number };
 type PaneRow = {
@@ -52,7 +72,7 @@ export function readLayout(db: Database, layoutId: string): StoredLayout | null 
     .get(layoutId);
   if (header === null) return null;
 
-  const nodes: Record<NodeId, LayoutNode> = {};
+  const nodes: Record<NodeId, RowPaneNode | SplitNode> = {};
   const currentUrls: Record<PaneId, string | null> = {};
 
   for (const row of db
@@ -98,7 +118,7 @@ export function readLayout(db: Database, layoutId: string): StoredLayout | null 
     .all(layoutId)
     .map((row) => ({ paneId: row.pane_id, dockedAt: row.docked_at }));
 
-  const tree: LayoutTree = { rootId: header.root_id, nodes, dock };
+  const tree = { rootId: header.root_id, nodes, dock };
   // `parseLayout` migrates and checks the tree; `serializeLayout` re-stamps it
   // with the current version, which is the shape `StoredLayout` carries.
   return {
@@ -121,7 +141,7 @@ export function writeLayout(
      ON CONFLICT (id) DO UPDATE SET root_id = excluded.root_id,
                                     layout_version = excluded.layout_version,
                                     updated_at = excluded.updated_at`,
-    [layoutId, tree.rootId, snapshot.layout.version, now],
+    [layoutId, tree.rootId, ROW_TREE_VERSION, now],
   );
   // Replacing the whole node set beats diffing it: a wall holds tens of nodes,
   // and the alternative is reconciliation logic that can drift from the tree.
@@ -146,7 +166,7 @@ export function writeLayout(
         node.id,
         layoutId,
         node.parentId,
-        node.url,
+        activePaneUrl(node),
         snapshot.currentUrls[node.id] ?? null,
         node.urlBarVisible ? 1 : 0,
         node.strategy,

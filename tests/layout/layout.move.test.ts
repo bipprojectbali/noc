@@ -11,10 +11,10 @@ import {
   createTree,
   listTreePaneIds,
   resizeSplit,
-  setPaneUrl,
   splitPane,
 } from "../../src/layout/layout.tree.ts";
 import { isPane, isSplit, type LayoutTree } from "../../src/layout/layout.types.ts";
+import { paneUrl, seedUrl } from "../fixtures/pane-sites.ts";
 
 function idFactory(): () => string {
   let next = 0;
@@ -63,11 +63,11 @@ describe("movePane", () => {
 
   test("carries the pane's url across the move", () => {
     const { tree: base, makeId } = threePaneWall();
-    const withUrl = setPaneUrl(base, "n5", "https://info.cern.ch/");
+    const withUrl = seedUrl(base, "n5", "https://info.cern.ch/");
 
     const tree = unwrap(movePane(withUrl, "n5", "n1", "top", makeId));
 
-    expect(tree.nodes.n5).toMatchObject({ url: "https://info.cern.ch/" });
+    expect(paneUrl(tree, "n5")).toBe("https://info.cern.ch/");
   });
 
   test("collapses the split the pane left behind, promoting its sibling", () => {
@@ -217,13 +217,13 @@ describe("swapPanes", () => {
 
   test("carries each pane's url with it", () => {
     const { tree: base } = threePaneWall();
-    let seeded = setPaneUrl(base, "n1", "https://a.example/");
-    seeded = setPaneUrl(seeded, "n5", "https://b.example/");
+    let seeded = seedUrl(base, "n1", "https://a.example/");
+    seeded = seedUrl(seeded, "n5", "https://b.example/");
 
     const tree = unwrap(swapPanes(seeded, "n1", "n5"));
 
-    expect(tree.nodes.n1).toMatchObject({ url: "https://a.example/" });
-    expect(tree.nodes.n5).toMatchObject({ url: "https://b.example/" });
+    expect(paneUrl(tree, "n1")).toBe("https://a.example/");
+    expect(paneUrl(tree, "n5")).toBe("https://b.example/");
   });
 
   test("swapping a pane with itself is a no-op", () => {

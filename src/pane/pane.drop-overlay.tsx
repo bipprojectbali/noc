@@ -20,6 +20,7 @@
  * from.
  */
 
+import { activePaneUrl } from "../layout/layout.sites.ts";
 import { isPane, type PaneId } from "../layout/layout.types.ts";
 import { usePaneDragStore } from "./pane.drag.ts";
 import { useWallStore } from "./pane.store.ts";
@@ -38,7 +39,7 @@ export function PaneDropOverlay({ paneId }: { paneId: PaneId }) {
   const drag = usePaneDragStore((state) => state.drag);
   const url = useWallStore((state) => {
     const node = state.tree.nodes[paneId];
-    return node !== undefined && isPane(node) ? node.url : null;
+    return node !== undefined && isPane(node) ? activePaneUrl(node) : null;
   });
 
   if (drag === null) return null;

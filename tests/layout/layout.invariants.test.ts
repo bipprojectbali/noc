@@ -14,6 +14,12 @@ import {
 } from "../../src/layout/layout.remove.ts";
 import { movePane, swapPanes } from "../../src/layout/layout.move.ts";
 import {
+  addSite,
+  removeSite,
+  setActiveSite,
+  setSiteUrl,
+} from "../../src/layout/layout.sites.ts";
+import {
   isPane,
   isSplit,
   type LayoutTree,
@@ -54,6 +60,18 @@ function allPaneIds(tree: LayoutTree): string[] {
     .sort();
 }
 
+/** The addresses one pane holds, empty for a pane that has none yet. */
+function siteIds(tree: LayoutTree, paneId: string): string[] {
+  const node = tree.nodes[paneId];
+  if (node === undefined || !isPane(node)) return [];
+  return node.sites.map((site) => site.id);
+}
+
+/** Every pane's site list, in order, as one comparable value. */
+function siteFingerprint(tree: LayoutTree): string[] {
+  return allPaneIds(tree).map((id) => `${id}=${siteIds(tree, id).join(",")}`);
+}
+
 const SIDES: readonly PaneSide[] = ["left", "right", "top", "bottom"];
 
 type Step = { op: string; args: string[] };
@@ -75,6 +93,13 @@ function applyRandomOp(
     "resize",
     "move",
     "swap",
+    // Site ops come out of the same id counter as nodes, which is the point:
+    // site ids are unique wall-wide, so one sequence producing both is exactly
+    // the guarantee `findViolations` checks.
+    "add-site",
+    "remove-site",
+    "activate-site",
+    "retarget-site",
   ] as const;
   const op = ops[Math.floor(random() * ops.length)] ?? "split";
   const direction = random() < 0.5 ? "row" : "column";
@@ -136,6 +161,45 @@ function applyRandomOp(
         step: { op: result.ok ? op : `${op}:refused`, args: [source, target] },
       };
     }
+    // Site ops draw from docked panes too: a docked pane is alive, and its
+    // sites must stay as well formed as any other pane's.
+    case "add-site": {
+      const target = pick(random, allPaneIds(tree));
+      if (target === undefined) break;
+      const url = `https://site-${Math.floor(random() * 1000)}.example/`;
+      return {
+        tree: addSite(tree, target, url, makeId, now),
+        step: { op, args: [target, url] },
+      };
+    }
+    case "remove-site": {
+      const target = pick(random, allPaneIds(tree));
+      const site = target === undefined ? undefined : pick(random, siteIds(tree, target));
+      if (target === undefined || site === undefined) break;
+      return {
+        tree: removeSite(tree, target, site),
+        step: { op, args: [target, site] },
+      };
+    }
+    case "activate-site": {
+      const target = pick(random, allPaneIds(tree));
+      const site = target === undefined ? undefined : pick(random, siteIds(tree, target));
+      if (target === undefined || site === undefined) break;
+      return {
+        tree: setActiveSite(tree, target, site),
+        step: { op, args: [target, site] },
+      };
+    }
+    case "retarget-site": {
+      const target = pick(random, allPaneIds(tree));
+      const site = target === undefined ? undefined : pick(random, siteIds(tree, target));
+      if (target === undefined || site === undefined) break;
+      const url = `https://moved-${Math.floor(random() * 1000)}.example/`;
+      return {
+        tree: setSiteUrl(tree, target, site, url),
+        step: { op, args: [target, site, url] },
+      };
+    }
     case "resize": {
       const target = pick(random, splitIds(tree));
       if (target === undefined) break;
@@ -160,14 +224,18 @@ describe("tree invariants hold under arbitrary operation sequences", () => {
 
       for (let i = 0; i < OPS_PER_SEED; i++) {
         const panesBefore = allPaneIds(tree);
+        const sitesBefore = siteFingerprint(tree);
         const result = applyRandomOp(tree, random, makeId, i + 1);
         tree = result.tree;
         history.push(result.step);
 
         // Rearranging must never mint or drop a pane id: a new id is a new
-        // pane to the pane layer, which means a remount and a page reload.
+        // pane to the pane layer, which means a remount and a page reload. The
+        // same goes for a pane's sites, in order: a site that changes place in
+        // the list is a frame that moves in the DOM, which reloads its page.
         if (result.step.op === "move" || result.step.op === "swap") {
           expect(allPaneIds(tree)).toEqual(panesBefore);
+          expect(siteFingerprint(tree)).toEqual(sitesBefore);
         }
 
         const violations = findViolations(tree);

@@ -15,6 +15,8 @@ import {
   splitPane,
 } from "../layout/layout.tree.ts";
 import { movePane, swapPanes } from "../layout/layout.move.ts";
+import { requirePane } from "../layout/layout.node.ts";
+import { addSite } from "../layout/layout.sites.ts";
 import {
   deletePane,
   dockPane,
@@ -166,7 +168,12 @@ export const useWallStore = create<WallState>((set, get) => {
         return;
       }
       set((state) => ({
-        tree: setPaneUrl(state.tree, paneId, result.url),
+        // An empty pane has no site to repoint, so the first address it is
+        // given has to be added. One site per pane is still all the UI makes.
+        tree:
+          requirePane(state.tree, paneId).activeSiteId === null
+            ? addSite(state.tree, paneId, result.url, makeId, nextCreatedAt())
+            : setPaneUrl(state.tree, paneId, result.url),
         urlError: { ...state.urlError, [paneId]: null },
         load: {
           ...state.load,

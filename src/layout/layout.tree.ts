@@ -7,6 +7,7 @@ import {
   requireSplit,
   requireNode,
 } from "./layout.node.ts";
+import { removeSite, setSiteUrl } from "./layout.sites.ts";
 import {
   isPane,
   sideIsLeading,
@@ -162,13 +163,28 @@ export function resizeSplit(
   };
 }
 
+/**
+ * Points the pane's active site at an address, or closes that site when given
+ * `null` — which empties a pane that held only the one, exactly as a pane with
+ * no url behaved before panes held lists.
+ *
+ * A pane with no site has nothing to point: giving the pane its *first*
+ * address is `addSite`, because only that can mint an id. Callers branch on
+ * `activeSiteId` rather than letting this guess, so a stale caller is loud.
+ */
 export function setPaneUrl(
   tree: LayoutTree,
   paneId: PaneId,
   url: string | null,
 ): LayoutTree {
   const pane = requirePane(tree, paneId);
-  return { ...tree, nodes: { ...tree.nodes, [paneId]: { ...pane, url } } };
+  if (pane.activeSiteId === null) {
+    if (url === null) return tree;
+    throw new Error(`Pane "${paneId}" has no site to point at "${url}"`);
+  }
+  return url === null
+    ? removeSite(tree, paneId, pane.activeSiteId)
+    : setSiteUrl(tree, paneId, pane.activeSiteId, url);
 }
 
 export function setPaneUrlBarVisible(

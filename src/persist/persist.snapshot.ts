@@ -7,6 +7,7 @@
  */
 
 import { serializeLayout } from "../layout/layout.serializer.ts";
+import { activePaneUrl } from "../layout/layout.sites.ts";
 import { isPane, type LayoutTree, type PaneId } from "../layout/layout.types.ts";
 import {
   INITIAL_PANE_LOAD_STATE,
@@ -60,7 +61,7 @@ export function seedLoadStates(snapshot: WallSnapshot): SeededLoad {
 
   for (const node of Object.values(snapshot.layout.tree.nodes)) {
     if (!isPane(node)) continue;
-    const url = snapshot.currentUrls[node.id] ?? node.url;
+    const url = snapshot.currentUrls[node.id] ?? activePaneUrl(node);
     if (url === null) {
       load[node.id] = INITIAL_PANE_LOAD_STATE;
       continue;

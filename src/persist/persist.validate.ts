@@ -18,6 +18,13 @@ import {
 /** Hard ceiling on a stored wall, so one request cannot write an unbounded file. */
 export const MAX_NODES = 512;
 
+/**
+ * Ceiling on the addresses one pane may carry. `MAX_NODES` counts nodes, so
+ * without this a single pane could arrive holding a million sites and the
+ * node count would still look fine.
+ */
+export const MAX_SITES_PER_PANE = 64;
+
 /** Longest URL accepted in a payload. Well past any real dashboard address. */
 const MAX_URL_LENGTH = 2048;
 
@@ -90,6 +97,21 @@ export function parseWallSnapshot(value: unknown): WallSnapshot {
   const nodeCount = Object.keys(tree.nodes).length;
   if (nodeCount > MAX_NODES) {
     fail(`"layout" holds ${nodeCount} nodes, more than the limit of ${MAX_NODES}`);
+  }
+
+  // A site url is handed straight to a frame on the next restart, so it gets
+  // the same treatment as a `currentUrls` entry rather than being trusted for
+  // having arrived inside the tree.
+  for (const node of Object.values(tree.nodes)) {
+    if (!isPane(node)) continue;
+    if (node.sites.length > MAX_SITES_PER_PANE) {
+      fail(
+        `"layout" gives pane "${node.id}" ${node.sites.length} sites, more than the limit of ${MAX_SITES_PER_PANE}`,
+      );
+    }
+    for (const site of node.sites) {
+      parseStoredUrl(site.url, `layout.tree.nodes.${node.id}.sites.${site.id}`);
+    }
   }
 
   const settings = parseSettings(raw.settings);
