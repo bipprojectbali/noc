@@ -26,6 +26,8 @@ const WALL_HEIGHT: f64 = 900.0;
 const DEFAULT_HOST: &str = "127.0.0.1";
 /// `0` asks the OS for a free port. See the module comment.
 const EPHEMERAL_PORT: &str = "0";
+/// Named because it is both passed through and filled in; see `sidecar_env`.
+const DATA_DIR_VAR: &str = "NOC_DATA_DIR";
 
 /// Kept so an orderly quit can release the port at once. It is not the thing
 /// that prevents orphans — the sidecar watches our pid for that, because a
@@ -37,7 +39,57 @@ pub struct SidecarProcess {
     stopping: AtomicBool,
 }
 
-fn sidecar_env() -> HashMap<String, String> {
+/// Where the wall database goes when the operator did not choose a place.
+///
+/// The sidecar's own default is the relative `.noc-data`, and a bundled app is
+/// launched by the OS with its working directory at `/`, which the sidecar
+/// inherits: the database path then resolves to `/.noc-data/noc.sqlite` on the
+/// read-only root volume, and the wall comes up with nothing saved and nothing
+/// it can save. A relative default is right for `bun run dev`, where the
+/// working directory is the project; it is a trap for every process whose
+/// working directory was chosen by something else. The shell is the config
+/// authority in production, so it is the shell's job to fill this in.
+///
+/// The directory is created here rather than left to the sidecar so a
+/// permission problem is named by the shell, with the path in it, before the
+/// wall is on screen. A failure is printed and the path handed over anyway: the
+/// sidecar creates the directory too, and if that also fails its reason names
+/// this directory rather than the baffling `/.noc-data`.
+fn default_data_dir(app: &AppHandle) -> Option<String> {
+    let dir = match app.path().app_data_dir() {
+        Ok(dir) => dir,
+        Err(error) => {
+            eprintln!(
+                "Cannot resolve the per-application data directory ({error}). \
+                 Set NOC_DATA_DIR to a writable directory."
+            );
+            return None;
+        }
+    };
+
+    if let Err(error) = std::fs::create_dir_all(&dir) {
+        eprintln!(
+            "Cannot create the data directory {} ({error}). \
+             Set NOC_DATA_DIR to a writable directory.",
+            dir.display()
+        );
+    }
+
+    match dir.into_os_string().into_string() {
+        Ok(path) => Some(path),
+        // The spawn environment is UTF-8 only, and a lossy path would point at
+        // the wrong directory, which is worse than saying so.
+        Err(raw) => {
+            eprintln!(
+                "The per-application data directory {raw:?} is not valid UTF-8. \
+                 Set NOC_DATA_DIR to a writable directory."
+            );
+            None
+        }
+    }
+}
+
+fn sidecar_env(app: &AppHandle) -> HashMap<String, String> {
     let mut env = HashMap::new();
     env.insert(
         "NOC_HOST".to_string(),
@@ -49,9 +101,17 @@ fn sidecar_env() -> HashMap<String, String> {
     );
     env.insert("NOC_PARENT_PID".to_string(), std::process::id().to_string());
     // Operator overrides are passed through; the sidecar validates them.
-    for key in ["NOC_DATA_DIR", "NOC_DB_FILE", "NOC_LOG_LEVEL"] {
-        if let Ok(value) = std::env::var(key) {
+    for key in [DATA_DIR_VAR, "NOC_DB_FILE", "NOC_LOG_LEVEL"] {
+        // An empty value is not a choice — the sidecar reads it as unset — so
+        // passing it on would only hide the fill below.
+        if let Some(value) = std::env::var(key).ok().filter(|value| !value.is_empty()) {
             env.insert(key.to_string(), value);
+        }
+    }
+    // Fills the gap without ever overruling the operator: see `default_data_dir`.
+    if !env.contains_key(DATA_DIR_VAR) {
+        if let Some(dir) = default_data_dir(app) {
+            env.insert(DATA_DIR_VAR.to_string(), dir);
         }
     }
     env
@@ -63,7 +123,7 @@ pub fn start(app: AppHandle) -> Result<(), String> {
         .shell()
         .sidecar(SIDECAR_NAME)
         .map_err(|error| format!("Cannot resolve the {SIDECAR_NAME} sidecar: {error}"))?
-        .envs(sidecar_env());
+        .envs(sidecar_env(&app));
 
     let (mut events, child) = command
         .spawn()
