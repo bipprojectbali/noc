@@ -8,6 +8,12 @@ import {
 import { createTree, splitPane } from "../../src/layout/layout.tree.ts";
 import { dockPane } from "../../src/layout/layout.remove.ts";
 import { findViolations } from "../../src/layout/layout.invariants.ts";
+import { setSiteZoom } from "../../src/layout/layout.sites.ts";
+import {
+  isPane,
+  type LayoutTree,
+  type PaneNode,
+} from "../../src/layout/layout.types.ts";
 import { seedUrl } from "../fixtures/pane-sites.ts";
 
 function sampleTree() {
@@ -118,7 +124,11 @@ describe("migrating a version 1 layout", () => {
       id: "left",
       kind: "pane",
       parentId: "root",
-      sites: [{ id: "left-s1", url: "https://info.cern.ch/", createdAt: 1 }],
+      // Version 1 knew nothing about magnification, so the 2 → 3 step gives the
+      // site it just built the ordinary size.
+      sites: [
+        { id: "left-s1", url: "https://info.cern.ch/", createdAt: 1, zoom: 1 },
+      ],
       activeSiteId: "left-s1",
       urlBarVisible: true,
       strategy: "webview",
@@ -155,5 +165,77 @@ describe("migrating a version 1 layout", () => {
     const tree = parseLayout(structuredClone(V1_PAYLOAD));
     expect(findViolations(tree)).toEqual([]);
     expect(serializeLayout(tree).version).toBe(CURRENT_LAYOUT_VERSION);
+  });
+});
+
+/**
+ * The shape sitting in a database written before a page could be magnified.
+ * Hand-written for the same reason the version 1 payload is: what matters is
+ * that the file already out there keeps opening.
+ */
+const V2_PAYLOAD = {
+  version: 2,
+  tree: {
+    rootId: "solo",
+    nodes: {
+      solo: {
+        id: "solo",
+        kind: "pane",
+        parentId: null,
+        sites: [
+          { id: "solo-s1", url: "https://info.cern.ch/", createdAt: 1 },
+          { id: "solo-s2", url: "https://example.com/", createdAt: 2 },
+        ],
+        activeSiteId: "solo-s2",
+        urlBarVisible: true,
+        strategy: "auto",
+        createdAt: 1,
+      },
+    },
+    dock: [],
+  },
+};
+
+/** The one pane of the version 2 payload, typed. */
+function soloPane(tree: LayoutTree): PaneNode {
+  const node = tree.nodes.solo;
+  if (node === undefined || !isPane(node)) throw new Error("no pane 'solo'");
+  return node;
+}
+
+describe("migrating a version 2 layout", () => {
+  test("every site comes back at the ordinary size", () => {
+    const tree = parseLayout(structuredClone(V2_PAYLOAD));
+    expect(soloPane(tree).sites).toEqual([
+      { id: "solo-s1", url: "https://info.cern.ch/", createdAt: 1, zoom: 1 },
+      { id: "solo-s2", url: "https://example.com/", createdAt: 2, zoom: 1 },
+    ]);
+    // A wall restored from this must pass the same checks as any other, or the
+    // whole layout is refused at startup and the operator loses it.
+    expect(findViolations(tree)).toEqual([]);
+    expect(serializeLayout(tree).version).toBe(CURRENT_LAYOUT_VERSION);
+  });
+
+  test("a stored zoom survives the round trip it was written for", () => {
+    const tree = parseLayout(structuredClone(V2_PAYLOAD));
+    const magnified = setSiteZoom(tree, "solo", "solo-s1", 1.5);
+    const restored = parseLayout(
+      JSON.parse(JSON.stringify(serializeLayout(magnified))),
+    );
+    expect(soloPane(restored).sites.map((site) => site.zoom)).toEqual([1.5, 1]);
+  });
+
+  test("a zoom no renderer could honour is pulled back rather than refused", () => {
+    // A hand-edited file, or one written by a build with a longer ladder. The
+    // alternative is `assertWellFormed` throwing out the entire wall.
+    const payload = structuredClone(V2_PAYLOAD) as {
+      version: number;
+      tree: { nodes: Record<string, { sites: { zoom?: unknown }[] }> };
+    };
+    const sites = payload.tree.nodes.solo?.sites ?? [];
+    if (sites[0] !== undefined) sites[0].zoom = 40;
+    if (sites[1] !== undefined) sites[1].zoom = "big";
+    const tree = parseLayout(payload);
+    expect(soloPane(tree).sites.map((site) => site.zoom)).toEqual([1, 1]);
   });
 });

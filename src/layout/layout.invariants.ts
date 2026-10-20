@@ -7,6 +7,7 @@ import {
   type LayoutTree,
   type NodeId,
 } from "./layout.types.ts";
+import { isZoomLevel, MAX_ZOOM, MIN_ZOOM } from "./layout.zoom.ts";
 
 /** Tolerance for fraction sums, which accumulate float error across resizes. */
 export const SIZE_EPSILON = 1e-9;
@@ -110,6 +111,15 @@ export function findViolations(tree: LayoutTree): string[] {
         problems.push(`site "${site.id}" appears more than once`);
       }
       seenSites.add(site.id);
+      // Checked here because this is where untrusted payloads land, and a
+      // magnification of 0, NaN or 40 is a page nobody can get back: the
+      // control that would undo it is drawn on top of what it scaled away.
+      if (!isZoomLevel(site.zoom)) {
+        problems.push(
+          `site "${site.id}" has zoom ${String(site.zoom)}, ` +
+            `which is not between ${MIN_ZOOM} and ${MAX_ZOOM}`,
+        );
+      }
     }
     const active = node.activeSiteId;
     if (node.sites.length === 0) {

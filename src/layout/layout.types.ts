@@ -41,6 +41,12 @@ export type PaneSite = {
   url: string;
   /** Creation order. See `layout.sites.ts` for why it is never re-sorted. */
   createdAt: number;
+  /**
+   * How much this page is magnified, 1 being 100%. Per site and not per pane:
+   * a pane holds several pages at once, and a dense dashboard beside a sparse
+   * one needs its own answer. `layout.zoom.ts` owns the ladder and the clamp.
+   */
+  zoom: number;
 };
 
 export type PaneNode = {
