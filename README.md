@@ -551,38 +551,51 @@ long as it was open — the designed cost, seen rather than assumed. What this
 run did **not** cover: adding a third page from that panel, removing one, the
 renderer switch, or anything about how the arithmetic above renders.
 
-### 10. The camera and the microphone: two layers opened, no device has arrived
+### 10. The camera reaches a framed pane — measured; the report that started this never reproduced
 
-**Known.** Why a page was reporting "device not found" in a loop: that is not
-a refusal, it is an empty device list, which is what a context that was never
-allowed to ask gets handed. Two renderers, two separate causes. A framed pane
-is cross-origin and inherits nothing from the wall page, and the frame carried
-no permission at all; it now carries camera and microphone, delegated to the
-pane's own origin rather than to anything it might nest. A native pane was
-blocked a layer below the app: WebKit already grants capture when nothing
-intervenes, but macOS hands no devices to an app that has not declared why it
-wants them, so the app now declares it and carries the entitlements signing
-needs.
+**Known, and seen this time.** A real Chrome with a real camera, driven over
+the devtools protocol, was pointed at a pane framing the `@vladmandic/human`
+demo — the same dashboard that had been logging `REQUESTED DEVICE NOT FOUND`
+in a loop. On the direct host and on the proxy host alike the frame reported
+`allowsFeature("camera") === true`, two video inputs from `enumerateDevices()`,
+`getUserMedia` resolving, and the demo reaching "starting detection". The
+demo's own constraint shapes (`facingMode`, `aspectRatio` from the pane's body
+box) were replayed inside the frame and all five resolved. So the delegation
+on the frame works, and it works through the proxy hostname too.
 
-**Not known.** Whether a device actually arrives, under either renderer.
-Neither layer can be tested here: the test DOM has no camera, and the
-declarations only exist inside a built app. The one thing asserted is that the
-permission is on the frame and survives a navigation. Also unseen: whether
-macOS raises its permission prompt at all, and what that prompt looks like
-over a pane that paints at the OS level.
+**Known by removal.** Taking the `allow` attribute off produced
+`NotAllowedError: Permission denied`, an empty allowlist, and Chrome's
+"Permissions policy violation: camera is not allowed in this document". That
+is the failure this codebase is capable of causing — and it is *not* the one
+that was reported.
 
-**The trap worth stating plainly.** `bun run tauri:dev` builds no app bundle,
-so capture will keep failing there and that failure is not evidence of
-anything. The only way to judge this is `bun run tauri:build` and then running
-the app it produces.
+**Fixed, and it is a different hole from the one reported.** A site may veto
+the camera for itself with `Permissions-Policy: camera=()`, and delegation
+cannot overrule that; a stand-in serving exactly that header measured
+`allowsFeature === false`, `permission: denied`, `NotAllowedError`. The proxy
+now removes `camera` and `microphone` from that header (and from the legacy
+`Feature-Policy`), leaving every other directive standing. The same stand-in,
+same browser, same minute: through the proxy host `policy=true … getusermedia=ok`,
+framed from `127.0.0.1` where no proxy sits, still
+`policy=false … NotAllowedError: Permission denied`. None of the real sites on
+the wall send that header, so this closes a hole nobody had hit yet.
+
+**Not known.** Why the original `NotFoundError` happened. It could not be
+reproduced on any host with the current tree, and no path in this repo can
+produce that error — the only failure here is `NotAllowedError`. The most
+likely story is that those panes predate the `allow` attribute, but that state
+yields `NotAllowedError` too, so it stays a guess. If the loop returns, the
+cheapest discriminator is still `enumerateDevices()` inside the frame: zero
+devices means the app never got to ask, a non-empty list means the constraint
+did not match.
 
 **Also a decision, not an oversight.** Any page on the wall may ask, with no
 per-pane switch — making it per-pane means a new field on a pane, which is a
-stored-format change rather than a toggle. In a browser you still get asked;
-inside the desktop app the request is granted without asking you.
+stored-format change rather than a toggle. In a browser you still get asked.
 
-**One step.** `bun run tauri:build`, open the app, put a page that calls
-`getUserMedia` in a pane of each kind, and watch what the prompt does.
+**Untouched.** The native renderer. The Tauri path is parked, so
+`Info.plist`, the entitlements and `on_permission_request` are unexamined and
+nothing here says a device reaches a native pane.
 
 ### 11. A pane keeping its page across a wall reload has never been watched
 

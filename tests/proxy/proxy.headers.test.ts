@@ -4,6 +4,7 @@ import {
   proxyRequestHeaders,
   proxyResponseHeaders,
   rewriteLocation,
+  stripCapturePolicy,
   stripCookieDomain,
   stripFrameAncestors,
 } from "../../src/proxy/proxy.headers.ts";
@@ -94,6 +95,42 @@ describe("stripFrameAncestors", () => {
   });
 });
 
+describe("stripCapturePolicy", () => {
+  test("removes only the two features the pane already delegated", () => {
+    // Measured in Chrome, not assumed: with `camera=()` standing, a pane reports
+    // `featurePolicy.allowsFeature("camera") === false` and getUserMedia fails
+    // with `NotAllowedError: Permission denied`.
+    expect(
+      stripCapturePolicy("geolocation=(), camera=(), microphone=(), usb=()", ","),
+    ).toBe("geolocation=(), usb=()");
+  });
+
+  test("leaves a policy that never mentioned capture alone", () => {
+    expect(stripCapturePolicy("geolocation=(self)", ",")).toBe("geolocation=(self)");
+  });
+
+  test("drops the header when capture was the whole policy", () => {
+    // An empty policy header is not the same as no policy header.
+    expect(stripCapturePolicy("camera=(), microphone=()", ",")).toBeNull();
+  });
+
+  test("is case-insensitive about the feature name", () => {
+    expect(stripCapturePolicy("Camera=(), fullscreen=*", ",")).toBe("fullscreen=*");
+  });
+
+  test("handles the superseded Feature-Policy spelling and its separator", () => {
+    expect(stripCapturePolicy("camera 'none'; geolocation 'self'", ";")).toBe(
+      "geolocation 'self'",
+    );
+  });
+
+  test("does not mistake a longer feature name for one of ours", () => {
+    expect(stripCapturePolicy("camera-something=(), display-capture=()", ",")).toBe(
+      "camera-something=(), display-capture=()",
+    );
+  });
+});
+
 describe("rewriteLocation", () => {
   test("keeps a redirect inside the proxy host", () => {
     // A login flow is a chain of redirects; released to the real origin even
@@ -170,6 +207,23 @@ describe("proxyResponseHeaders", () => {
     const headers = proxyResponseHeaders(upstream, UPSTREAM, PROXY);
     expect(headers.get("x-frame-options")).toBeNull();
     expect(headers.get("content-security-policy")).toBe("default-src 'self'");
+  });
+
+  test("clears the site's own veto on camera and microphone", () => {
+    const upstream = new Headers({
+      "permissions-policy": "camera=(), microphone=(), geolocation=()",
+      "feature-policy": "camera 'none'; fullscreen 'self'",
+    });
+    const headers = proxyResponseHeaders(upstream, UPSTREAM, PROXY);
+    expect(headers.get("permissions-policy")).toBe("geolocation=()");
+    expect(headers.get("feature-policy")).toBe("fullscreen 'self'");
+  });
+
+  test("removes the header outright when nothing but capture was in it", () => {
+    const upstream = new Headers({ "permissions-policy": "camera=()" });
+    expect(
+      proxyResponseHeaders(upstream, UPSTREAM, PROXY).get("permissions-policy"),
+    ).toBeNull();
   });
 
   test("drops content-encoding and content-length, which fetch has invalidated", () => {

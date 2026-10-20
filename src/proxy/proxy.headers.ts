@@ -40,6 +40,21 @@
  * longer in the picture. Losing the refusal notice is a side effect of moving
  * the site next to the wall, not the purpose. The rest of the CSP is left
  * alone: only the directive that blocks framing is removed.
+ *
+ * The same reasoning, and the same narrowness, cover one more rule: **`camera`
+ * and `microphone` are removed from any `Permissions-Policy` the site sends.**
+ * A pane delegates both features to the framed document (`PANE_ALLOW_POLICY` in
+ * `pane.iframe-renderer.tsx`), but delegation is only half the decision — the
+ * document's own policy header applies on top of it, and a site answering
+ * `camera=()` switches the feature off for itself no matter what the container
+ * allowed. Measured, not assumed: a stand-in serving exactly that header
+ * reports `featurePolicy.allowsFeature("camera") === false` inside a pane and
+ * fails with `NotAllowedError: Permission denied`, while the identical page
+ * without the header reaches the device. Removing the directive is not the same
+ * as forcing the feature on — it falls back to the default allowlist, which for
+ * both features is `self`, which is exactly what the pane already delegated.
+ * Every other directive is left standing, so a site's `geolocation=()` still
+ * means what it said.
  */
 
 /**
@@ -73,6 +88,25 @@ const CSP_HEADERS = [
 ];
 
 /**
+ * The features a pane hands to the site it frames. Kept in step with
+ * `PANE_ALLOW_POLICY` by hand rather than imported: that constant lives in a
+ * React renderer, and this module is loaded by the server, which must not pull
+ * the frontend in behind it.
+ */
+const DELEGATED_CAPTURE_FEATURES = ["camera", "microphone"];
+
+/**
+ * The two spellings of a capture policy, with the separator each one uses
+ * between directives. `Feature-Policy` is the superseded form and reaches here
+ * only from a site old enough to still emit it; stripping both costs one entry
+ * and avoids a hole that would be invisible until someone hit it.
+ */
+const CAPTURE_POLICY_HEADERS: readonly (readonly [string, string])[] = [
+  ["permissions-policy", ","],
+  ["feature-policy", ";"],
+];
+
+/**
  * Removes the `Domain` attribute so the cookie is stored host-only. Splitting
  * on `;` is safe: an unquoted cookie value may not contain a semicolon, and a
  * quoted one is still a single segment.
@@ -97,6 +131,30 @@ export function stripFrameAncestors(policy: string): string | null {
     .filter((directive) => directive.split(/\s+/)[0]?.toLowerCase() !== "frame-ancestors");
   if (kept.length === 0) return null;
   return kept.join("; ");
+}
+
+/**
+ * Removes only the capture directives, keeping the rest of the policy. Returns
+ * null when nothing is left, which means the header should be dropped — an
+ * empty policy header is not the same as no policy header.
+ *
+ * A directive name is whatever precedes the first `=` (`Permissions-Policy`) or
+ * the first space (`Feature-Policy`); the allowlist that follows may contain
+ * neither separator unquoted, so one split settles both spellings.
+ */
+export function stripCapturePolicy(policy: string, separator: string): string | null {
+  const kept = policy
+    .split(separator)
+    .map((directive) => directive.trim())
+    .filter((directive) => directive !== "")
+    .filter(
+      (directive) =>
+        !DELEGATED_CAPTURE_FEATURES.includes(
+          (directive.split(/[=\s]/)[0] ?? "").toLowerCase(),
+        ),
+    );
+  if (kept.length === 0) return null;
+  return kept.join(`${separator} `);
 }
 
 /**
@@ -165,6 +223,14 @@ export function proxyResponseHeaders(
     const policy = headers.get(name);
     if (policy === null) continue;
     const kept = stripFrameAncestors(policy);
+    if (kept === null) headers.delete(name);
+    else headers.set(name, kept);
+  }
+
+  for (const [name, separator] of CAPTURE_POLICY_HEADERS) {
+    const policy = headers.get(name);
+    if (policy === null) continue;
+    const kept = stripCapturePolicy(policy, separator);
     if (kept === null) headers.delete(name);
     else headers.set(name, kept);
   }
