@@ -9,17 +9,18 @@ import { paneLoadState, useWallStore } from "./pane.store.ts";
 export type PaneFrameProps = { paneId: PaneId };
 
 /**
- * One pane: its strip and its content.
+ * One pane: its chrome and its content.
  *
  * The content is mounted for the pane's whole life and only ever hidden.
  * Unmounting it, or moving it to a different parent in the DOM, reloads the
  * site and discards everything it holds.
  *
- * The strip is a sibling of the content, never an overlay. Under the webview
- * renderer the pane is a native view that paints above the whole web layer, so
- * anything permanently drawn on top of it would not be there. The menu panel
- * the strip opens *is* an overlay, which is why it hides every webview for as
- * long as it is open — see `pane.menu`.
+ * Whether the chrome may float over that content is decided here, per pane,
+ * from the renderer actually serving it — not from the host, and not once for
+ * the wall. An iframe is in the DOM and can be drawn over, so its pane spends
+ * no height on chrome at all. A native webview paints above the entire web
+ * layer and ignores CSS clipping, so a button floating over one would not be
+ * there; that pane keeps a seam instead. A wall can hold both at once.
  *
  * Whether the menu is open lives here rather than in `pane.menu`, because the
  * empty-pane message opens it too: right-click reaches only the surfaces this
@@ -57,6 +58,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
         error={error}
         strategy={node.strategy}
         nativeHost={nativeHost}
+        floating={renderer.kind === "iframe"}
         open={menuOpen}
         onOpenChange={setMenuOpen}
         onSubmit={(raw) => {

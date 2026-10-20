@@ -1,28 +1,29 @@
 /**
- * What the strip's ⋮ opens: a pane's whole control surface, on demand.
+ * What ⋮ opens: an ordinary desktop context menu, not a settings page.
+ *
+ * The first attempt stretched every control to the pane's width, which read as
+ * a form bolted to a dashboard. This is the shape people know — a narrow card
+ * under the button, single-line rows, groups parted one way and only one way,
+ * the destructive item last and in the danger colour. The width is fixed so
+ * the panel fits the smallest pane a wall will make, and it is 224px because
+ * that is the longest renderer label: an option nobody can finish reading is
+ * not an option.
+ *
+ * Three groups: what the pane shows, what to do to it, and the one that
+ * destroys it. Address and renderer sit together because they answer the same
+ * question, so they share one geometry. The address is first because giving a
+ * pane a URL is the one thing this menu exists for; Enter submits it, and a Go
+ * button bought nothing a form already does. Each renderer label names its
+ * cost, because switching rebuilds the content and the site reloads.
  *
  * Split from `pane.menu` along the line that matters rather than to make two
- * files. That one owns the panel's lifetime — the webview suppressor, Escape, a
- * click outside — and this one owns what is inside it and holds nothing but the
- * address the user is part way through typing. Together they were over the size
- * this project allows a component, and the lifetime half is where the invariants
- * live, so it is the half that has to stay readable.
- *
- * Each renderer label names its cost because the cost is paid the moment the
- * choice is made: switching rebuilds the pane's content, so the site reloads.
- * It no longer warns that a webview covers the pane's own chrome. That was true
- * while `chrome_height()` reported zero on macOS; it now reads AppKit's
- * `contentLayoutRect`, and the chrome a pane still has is a strip above the
- * webview's anchor, never across it.
+ * files: that one owns the panel's lifetime, this one owns its contents and
+ * holds nothing but the address being typed.
  */
 
 import { useEffect, useState } from "react";
 
-import type {
-  PaneId,
-  PaneStrategy,
-  SplitDirection,
-} from "../layout/layout.types.ts";
+import type { PaneId, PaneStrategy, SplitDirection } from "../layout/layout.types.ts";
 
 export type PaneMenuPanelProps = {
   paneId: PaneId;
@@ -69,10 +70,16 @@ export function PaneMenuPanel({
     setDraft(url ?? "");
   }, [url]);
 
+  const actions = [
+    { slug: "reload", label: "Reload", run: onReload },
+    { slug: "split-row", label: "Split right", run: () => onSplit("row") },
+    { slug: "split-column", label: "Split down", run: () => onSplit("column") },
+  ];
+
   return (
     <div className="noc-pane__menu" role="menu" data-testid={`pane-menu-${paneId}`}>
       <form
-        className="noc-pane__menu-row"
+        className="noc-pane__menu-form"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit(draft);
@@ -82,13 +89,10 @@ export function PaneMenuPanel({
           className="noc-pane__input"
           aria-label={`URL for pane ${paneId}`}
           aria-invalid={error !== null}
-          placeholder="dashboard.internal or https://example.com"
+          placeholder="URL, then Enter"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
-        <button className="noc-pane__button" type="submit">
-          Go
-        </button>
       </form>
 
       {error !== null && (
@@ -97,35 +101,29 @@ export function PaneMenuPanel({
         </span>
       )}
 
-      <select
-        className="noc-pane__button noc-pane__select"
-        aria-label={`Renderer for pane ${paneId}`}
-        data-testid={`pane-strategy-${paneId}`}
-        value={strategy}
-        onChange={(event) => {
-          onStrategyChange(event.target.value as PaneStrategy);
-        }}
-      >
-        {STRATEGIES.map((option) => (
-          <option
-            key={option}
-            value={option}
-            disabled={option === "webview" && !nativeHost}
-          >
-            {strategyLabel(option, nativeHost)}
-          </option>
-        ))}
-      </select>
+      <div className="noc-pane__menu-field">
+        <span>Renderer</span>
+        <select
+          className="noc-pane__select"
+          aria-label={`Renderer for pane ${paneId}`}
+          data-testid={`pane-strategy-${paneId}`}
+          value={strategy}
+          onChange={(event) => onStrategyChange(event.target.value as PaneStrategy)}
+        >
+          {STRATEGIES.map((option) => (
+            <option key={option} value={option} disabled={option === "webview" && !nativeHost}>
+              {strategyLabel(option, nativeHost)}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      {[
-        { slug: "reload", label: "Reload", run: onReload },
-        { slug: "split-row", label: "Split right", run: () => onSplit("row") },
-        { slug: "split-column", label: "Split down", run: () => onSplit("column") },
-        { slug: "close", label: "Close", run: onClose, danger: true },
-      ].map((item) => (
+      <div className="noc-pane__menu-rule" />
+
+      {actions.map((item) => (
         <button
           key={item.slug}
-          className={`noc-pane__menu-item${item.danger === true ? " noc-pane__button--danger" : ""}`}
+          className="noc-pane__menu-item"
           type="button"
           role="menuitem"
           data-testid={`pane-${item.slug}-${paneId}`}
@@ -134,6 +132,18 @@ export function PaneMenuPanel({
           {item.label}
         </button>
       ))}
+
+      <div className="noc-pane__menu-rule" />
+
+      <button
+        className="noc-pane__menu-item noc-pane__menu-item--danger"
+        type="button"
+        role="menuitem"
+        data-testid={`pane-close-${paneId}`}
+        onClick={onClose}
+      >
+        Close
+      </button>
     </div>
   );
 }
