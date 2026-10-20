@@ -251,6 +251,23 @@ body.noc-no-pane-cursor .noc-pane-host {
   color: var(--noc-muted);
 }
 
+/* Mirrors the URL bar, under the body instead of over it. Same reasoning: a
+   sibling row, never an overlay. */
+.noc-pane__controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 6px;
+  height: var(--noc-chrome-height);
+  background: var(--noc-chrome);
+  border-top: 1px solid var(--noc-border);
+}
+
+.noc-pane__button--danger {
+  color: var(--noc-danger);
+}
+
 .noc-error {
   padding: 24px;
 }
