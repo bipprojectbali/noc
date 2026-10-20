@@ -526,6 +526,21 @@ something a pointer can hit, chosen on arithmetic alone; nobody has yet tried
 to click the fourth dot on a narrow pane, or seen whether the jump from four
 dots to a `3/8` chip reads as the same control or as a different one.
 
+**Watched, on a native pane.** A wall of two panes was run in the desktop app,
+one pane rendered as a native webview holding two pages. Both pips and ⋮ were
+visible in that pane's seam and both pips took a click. Each page carried a
+load counter, a document-open timestamp, a live scroll readout and a text
+field. Page B's timestamp was 12 ms after page A's, so both webviews were
+created when the wall loaded rather than on the switch. Stepping to B and back
+left A's counter at one, its timestamp unchanged, its scroll at 2355 and its
+typed text intact, and the same held for B. Only the active page was on
+screen; the hidden sibling was absent from the accessibility tree entirely,
+which is what `setHidden:` does. The ⋮ panel opened over that pane, listed both
+pages and offered "Add site…", with every webview on the wall blanked for as
+long as it was open — the designed cost, seen rather than assumed. What this
+run did **not** cover: adding a third page from that panel, removing one, the
+renderer switch, or anything about how the arithmetic above renders.
+
 ### 10. The camera and the microphone: two layers opened, no device has arrived
 
 **Known.** Why a page was reporting "device not found" in a loop: that is not

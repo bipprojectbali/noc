@@ -248,7 +248,7 @@ fn chrome_url(app: &AppHandle, pane_id: &str) -> Result<tauri::Url, String> {
 /// showing its page with no ⋮ is worth more than a pane that refused to open,
 /// and the wall page's own hidden ⋮ comes back as soon as a menu is opened
 /// anywhere.
-fn ensure_chrome(app: &AppHandle, pane_id: &str, label: &str, rect: PaneRect) {
+fn ensure_chrome(app: &AppHandle, pane_id: &str, label: &str, rect: PaneRect, visible: bool) {
     let label = chrome_label(label);
     if pane_webview(app, &label).is_some() {
         return;
@@ -259,13 +259,21 @@ fn ensure_chrome(app: &AppHandle, pane_id: &str, label: &str, rect: PaneRect) {
     let built = chrome_url(app, pane_id).and_then(|url| {
         let window = wall_window(app)?;
         let offset = chrome_height(&window)?;
-        window
+        let chrome = window
             .add_child(
                 WebviewBuilder::new(&label, WebviewUrl::External(url)).transparent(true),
                 corner.position(offset),
                 corner.size(),
             )
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+        // The same visibility the page was opened with, and for a sharper
+        // reason: a pane's background pages each carry their own corner, so a
+        // chrome left showing over a hidden page would sit on top of the chrome
+        // belonging to the page that is actually on screen.
+        if !visible {
+            chrome.hide().map_err(|error| error.to_string())?;
+        }
+        Ok(())
     });
     if let Err(error) = built {
         eprintln!("Pane {pane_id} could not get its chrome button: {error}");
@@ -298,6 +306,14 @@ fn parse_url(pane_id: &str, url: &str) -> Result<tauri::Url, String> {
 /// tell a first call from a repeat one: the page that tracks which panes it has
 /// opened is itself reloadable, and a reload of it would otherwise send every
 /// pane back to the address the layout holds. See `PaneNavigations`.
+///
+/// `visible` is what the caller wants on screen once this call is done, and it
+/// has to be asked here rather than left to the `place` that follows. A pane
+/// holds several pages and shows one: opening or navigating always showed the
+/// webview, so each of a pane's background pages painted over the active one
+/// until the caller's correction arrived an IPC round-trip later — once per
+/// page on every wall reload. Unset means show, which is what a caller holding
+/// a single page means.
 #[tauri::command]
 pub fn pane_webview_show(
     app: AppHandle,
@@ -305,10 +321,12 @@ pub fn pane_webview_show(
     url: String,
     rect: PaneRect,
     navigate: Option<bool>,
+    visible: Option<bool>,
 ) -> Result<(), String> {
     let label = pane_label(&pane_id)?;
     let target = parse_url(&pane_id, &url)?;
     let history = app.state::<PaneNavigations>();
+    let visible = visible.unwrap_or(true);
 
     if let Some(webview) = pane_webview(&app, &label) {
         if navigate == Some(true) || !history.is_current(&label, &url) {
@@ -319,13 +337,13 @@ pub fn pane_webview_show(
         }
         // Not only on the create path: a pane whose chrome failed to build, or
         // one first shown while it had no area to put a corner in, gets one here.
-        ensure_chrome(&app, &pane_id, &label, rect);
-        return place_pane(&app, &pane_id, &label, rect, true);
+        ensure_chrome(&app, &pane_id, &label, rect, visible);
+        return place_pane(&app, &pane_id, &label, rect, visible);
     }
 
     let window = wall_window(&app)?;
     let offset = chrome_height(&window)?;
-    window
+    let webview = window
         .add_child(
             WebviewBuilder::new(&label, WebviewUrl::External(target)),
             rect.position(offset),
@@ -333,8 +351,16 @@ pub fn pane_webview_show(
         )
         .map_err(|error| format!("Pane {pane_id} could not get a webview: {error}"))?;
     history.remember(&label, &url);
+    // A new webview is shown by the window system. Hiding it is not suspending
+    // the load: the view stays in the hierarchy and the document still arrives,
+    // which is exactly what a page kept warm behind its sibling is for.
+    if !visible {
+        webview
+            .hide()
+            .map_err(|error| format!("Pane {pane_id} could not be hidden: {error}"))?;
+    }
     // After the page and never before it: creation order is paint order.
-    ensure_chrome(&app, &pane_id, &label, rect);
+    ensure_chrome(&app, &pane_id, &label, rect, visible);
     Ok(())
 }
 

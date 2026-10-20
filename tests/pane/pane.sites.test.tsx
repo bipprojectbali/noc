@@ -215,6 +215,13 @@ function visibilityOf(siteId: string): boolean | undefined {
     .at(-1)?.visible as boolean | undefined;
 }
 
+/** What the last `pane_webview_show` for this site asked to be on screen. */
+function openVisibilityOf(siteId: string): boolean | undefined {
+  return invokeCalls
+    .filter((call) => call.cmd === "pane_webview_show" && call.paneId === siteId)
+    .at(-1)?.visible as boolean | undefined;
+}
+
 describe("switching sites in the native shell never destroys a webview", () => {
   test("both pages are opened, and the switch only changes which is visible", async () => {
     enterNativeHost();
@@ -245,6 +252,29 @@ describe("switching sites in the native shell never destroys a webview", () => {
     // The point of the whole design: the page being left is hidden, not closed.
     // Closing it would reload it on the way back and lose its session.
     expect(invokeCalls.map((call) => call.cmd)).not.toContain("pane_webview_close");
+  });
+
+  /**
+   * A reload re-opens every page the pane holds, which is also what a reload of
+   * the wall page itself does: the shell still owns the webviews, and the page
+   * that just came back hands them their addresses again. Opening used to mean
+   * showing, so each background page painted over the active one until the
+   * correcting `place` landed an IPC round-trip later.
+   */
+  test("a page kept warm behind its sibling is never asked to be shown", async () => {
+    enterNativeHost();
+    render(<PaneFrame paneId={PANE} />);
+    const [first, second] = await giveSites(2);
+    await placePane([first!, second!]);
+
+    await act(async () => {
+      useWallStore.getState().reloadPane(PANE);
+    });
+    await settleAsyncWork();
+
+    // `giveSites` leaves the last page active, so `first` is the one behind.
+    expect(openVisibilityOf(first!)).toBe(false);
+    expect(openVisibilityOf(second!)).toBe(true);
   });
 
   test("removing a page is the one switch-adjacent thing that does close it", async () => {
