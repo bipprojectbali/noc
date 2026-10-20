@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import { isNativeHost } from "../native/native.bridge.ts";
 import { isPane, type PaneId, type PaneSite } from "../layout/layout.types.ts";
+import { DEFAULT_ZOOM } from "../layout/layout.zoom.ts";
 import { usePaneChrome } from "./pane.chrome-channel.ts";
 import { PaneCookieNotice } from "./pane.cookie-notice.tsx";
 import { INITIAL_PANE_LOAD_STATE, type PaneLoadState } from "./pane.load-state.ts";
@@ -62,6 +63,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
   const activateSite = useWallStore((state) => state.activateSite);
   const toggleSite = useWallStore((state) => state.toggleSite);
   const removeSite = useWallStore((state) => state.removeSite);
+  const setSiteZoom = useWallStore((state) => state.setSiteZoom);
   const reloadPane = useWallStore((state) => state.reloadPane);
   const splitPane = useWallStore((state) => state.splitPane);
   const deletePane = useWallStore((state) => state.deletePane);
@@ -86,7 +88,8 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
   }
 
   const activeIndex = node.sites.findIndex((site) => site.id === node.activeSiteId);
-  const url = node.sites[activeIndex]?.url ?? null;
+  const activeSite = node.sites[activeIndex];
+  const url = activeSite?.url ?? null;
   // The chrome asks about the page on screen. The pane's other pages are
   // loaded and hidden, and nothing above here asks about them collectively.
   const load = loads[activeIndex] ?? INITIAL_PANE_LOAD_STATE;
@@ -111,6 +114,16 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
           next: () => toggleSite(paneId),
           add: (raw) => addSite(paneId, raw),
           remove: (siteId) => removeSite(paneId, siteId),
+        }}
+        zoom={{
+          // The page on screen, and only that one: the pane's other pages keep
+          // whatever they were set to, which is the point of storing this per
+          // site. An empty pane has nothing to magnify and says so with null.
+          level: activeSite?.zoom ?? null,
+          applies: renderer.kind === "iframe",
+          set: (level) => {
+            if (activeSite !== undefined) setSiteZoom(paneId, activeSite.id, level);
+          },
         }}
         error={error}
         strategy={node.strategy}
@@ -150,6 +163,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
             url={null}
             load={INITIAL_PANE_LOAD_STATE}
             active
+            zoom={DEFAULT_ZOOM}
           />
         ) : (
           node.sites.map((site, index) => (
@@ -160,6 +174,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
               url={site.url}
               load={loads[index] ?? INITIAL_PANE_LOAD_STATE}
               active={site.id === node.activeSiteId}
+              zoom={site.zoom}
             />
           ))
         )}

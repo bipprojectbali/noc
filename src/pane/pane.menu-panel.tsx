@@ -30,6 +30,7 @@ import type { PaneId, PaneStrategy, SplitDirection } from "../layout/layout.type
 import { SessionMenuItem } from "../session/session.menu-item.tsx";
 import { PaneMenuRendererField } from "./pane.menu-renderer-field.tsx";
 import { PaneMenuSites } from "./pane.menu-sites.tsx";
+import { PaneMenuZoomField, type PaneZoomControl } from "./pane.menu-zoom.tsx";
 import type { PaneSitesControl } from "./pane.site-switcher.tsx";
 
 /** Breathing room kept between the panel and the window edge. */
@@ -77,6 +78,7 @@ export type PaneMenuPanelProps = {
   paneId: PaneId;
   url: string | null;
   sites: PaneSitesControl;
+  zoom: PaneZoomControl;
   error: string | null;
   strategy: PaneStrategy;
   nativeHost: boolean;
@@ -91,6 +93,7 @@ export function PaneMenuPanel({
   paneId,
   url,
   sites,
+  zoom,
   error,
   strategy,
   nativeHost,
@@ -180,6 +183,11 @@ export function PaneMenuPanel({
         nativeHost={nativeHost}
         onStrategyChange={onStrategyChange}
       />
+
+      {/* With the renderer and not with the actions: both answer "how is this
+          page shown", and neither closes the menu — zoom is stepped while the
+          result is watched, which the action rows below are not. */}
+      <PaneMenuZoomField paneId={paneId} zoom={zoom} />
 
       <PaneMenuSites
         paneId={paneId}

@@ -56,6 +56,7 @@ import {
 import { usePaneDragHandle } from "./pane.drag.ts";
 import { usePaneMenuDismiss } from "./pane.menu-dismiss.ts";
 import { PaneMenuPanel } from "./pane.menu-panel.tsx";
+import type { PaneZoomControl } from "./pane.menu-zoom.tsx";
 import {
   PaneSiteSwitcher,
   type PaneSitesControl,
@@ -72,6 +73,12 @@ export type PaneMenuProps = {
    * does not blank every webview on the wall to use.
    */
   sites: PaneSitesControl;
+  /**
+   * Magnification of the page on screen. Passes straight through to the panel:
+   * the floating row has no space for it, and nothing about it is worth a
+   * control that is visible without opening the menu.
+   */
+  zoom: PaneZoomControl;
   error: string | null;
   strategy: PaneStrategy;
   /**

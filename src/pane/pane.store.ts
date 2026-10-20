@@ -67,6 +67,11 @@ export type WallState = {
   toggleSite: (paneId: PaneId) => void;
   /** Closes one page for good. An emptied pane stays on the wall. */
   removeSite: (paneId: PaneId, siteId: SiteId) => void;
+  /**
+   * Magnifies one page. Per site, not per pane: the ⋮ panel steps the page on
+   * screen, and the pane's other pages keep whatever they were set to.
+   */
+  setSiteZoom: (paneId: PaneId, siteId: SiteId, zoom: number) => void;
   reloadPane: (paneId: PaneId) => void;
   clearPane: (paneId: PaneId) => void;
   /**

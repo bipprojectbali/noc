@@ -52,7 +52,7 @@ export const NO_CURSOR_CAPTURE_CLASS = "noc-no-pane-cursor";
  */
 export const PANE_ALLOW_POLICY = "camera; microphone";
 
-function PaneIframe({ paneId, siteId, load, active }: PaneContentProps) {
+function PaneIframe({ paneId, siteId, load, active, zoom }: PaneContentProps) {
   const dispatchLoad = useWallStore((state) => state.dispatchLoad);
 
   // Only these two states have a frameable url; the rest are the chrome's job.
@@ -78,6 +78,17 @@ function PaneIframe({ paneId, siteId, load, active }: PaneContentProps) {
       data-site-id={siteId}
       title={`Pane ${paneId}`}
       allow={PANE_ALLOW_POLICY}
+      // CSS `zoom`, not `transform: scale()`, and on the iframe rather than
+      // anything around it. Measured in Chrome 155, both magnify the page and
+      // both hit-test correctly — but `zoom` is one layout-level property where
+      // the transform needs three (`scale` + `transform-origin` + a
+      // `calc(100% / k)` on both axes) that silently misalign the viewport if
+      // they drift apart, and a transform would make this element a containing
+      // block and a stacking context inside a host that already stacks the
+      // floating chrome against it. A wrapper element is out of the question:
+      // re-parenting the iframe reloads the page (invariant 1), and the host
+      // already carries the geometry layer's own `transform: translate(...)`.
+      style={{ zoom }}
       src={frameSrc}
       onLoad={() => {
         // The typed url, never the proxied one: the load state machine matches

@@ -24,6 +24,7 @@ import {
   removeSite as removeSiteFromTree,
   nextSiteId,
   setActiveSite,
+  setSiteZoom as setSiteZoomInTree,
 } from "../layout/layout.sites.ts";
 import { requirePane } from "../layout/layout.node.ts";
 import { setPaneUrl } from "../layout/layout.tree.ts";
@@ -73,6 +74,7 @@ export type WallSitesSlice = Pick<
   | "activateSite"
   | "toggleSite"
   | "removeSite"
+  | "setSiteZoom"
   | "reloadPane"
   | "clearPane"
   | "dispatchLoad"
@@ -217,6 +219,21 @@ export function createWallSitesSlice(set: SetWall, get: GetWall): WallSitesSlice
     },
 
     removeSite: dropSite,
+
+    setSiteZoom: (paneId, siteId, zoom) => {
+      set((state) => {
+        const pane = state.tree.nodes[paneId];
+        if (pane === undefined || !isPane(pane)) return {};
+        // A control can be clicked a frame after the page it names was closed,
+        // and `setSiteZoom` throws on an unknown site — the same guard the
+        // other per-site actions above carry, for the same reason.
+        if (!pane.sites.some((site) => site.id === siteId)) return {};
+        // A tree write and nothing else. Magnifying a page must not reload it,
+        // reprobe it or touch its load state: the whole point is to keep the
+        // page, its scroll position and its session exactly where they are.
+        return { tree: setSiteZoomInTree(state.tree, paneId, siteId, zoom) };
+      });
+    },
 
     reloadPane: (paneId) => {
       const pane = get().tree.nodes[paneId];
