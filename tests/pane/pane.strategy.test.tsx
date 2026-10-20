@@ -59,6 +59,11 @@ async function submit(paneId: string, raw: string): Promise<void> {
   });
 }
 
+/** The renderer picker lives in the pane menu, so a test that wants it opens it. */
+function openMenu(paneId: string): void {
+  fireEvent.click(screen.getByTestId(`pane-menu-button-${paneId}`));
+}
+
 function strategyOf(paneId: string): PaneStrategy {
   const node = useWallStore.getState().tree.nodes[paneId];
   if (node === undefined || node.kind !== "pane") throw new Error("not a pane");
@@ -144,6 +149,7 @@ describe("the strategy action in a browser", () => {
 
   test("the picker offers the webview, disabled, with the reason in its label", () => {
     render(<PaneFrame paneId={PANE} />);
+    openMenu(PANE);
     const select = screen.getByTestId(`pane-strategy-${PANE}`) as HTMLSelectElement;
     const webview = Array.from(select.options).find(
       (option) => option.value === "webview",
@@ -156,6 +162,7 @@ describe("the strategy action in a browser", () => {
 
   test("the picker writes the chosen strategy into the tree", () => {
     render(<PaneFrame paneId={PANE} />);
+    openMenu(PANE);
     act(() => {
       fireEvent.change(screen.getByTestId(`pane-strategy-${PANE}`), {
         target: { value: "iframe" },
@@ -258,7 +265,7 @@ describe("the strategy action in the native shell", () => {
     expect(screen.getByTestId(`pane-webview-${PANE}`)).toBeDefined();
   });
 
-  test("the refusal points at the picker and says the switch reloads", async () => {
+  test("the refusal points at the menu and says the switch reloads", async () => {
     await setStrategy(PANE, "iframe");
     globalThis.fetch = (async () =>
       new Response(
@@ -272,7 +279,7 @@ describe("the strategy action in the native shell", () => {
       () => screen.getByTestId(`pane-refused-${PANE}`),
       WAIT,
     );
-    expect(refusal.textContent).toContain("Webview in the URL bar");
+    expect(refusal.textContent).toContain("Webview in its ⋮ menu");
     expect(refusal.textContent).toContain("reloads the page");
   });
 });

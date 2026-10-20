@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 import { PaneFrame } from "../../src/pane/pane.frame.tsx";
 import { useWallStore } from "../../src/pane/pane.store.ts";
@@ -47,6 +54,11 @@ afterEach(async () => {
   globalThis.fetch = realFetch;
 });
 
+/** The URL field lives in the menu now, so a test that wants it opens it. */
+function openMenu(): void {
+  fireEvent.click(screen.getByTestId(`pane-menu-button-${PANE_ID}`));
+}
+
 function urlInput(): HTMLInputElement {
   return screen.getByLabelText(`URL for pane ${PANE_ID}`) as HTMLInputElement;
 }
@@ -58,16 +70,11 @@ async function submit(raw: string): Promise<void> {
   });
 }
 
-async function setUrlBarVisible(visible: boolean): Promise<void> {
-  await act(async () => {
-    useWallStore.getState().setUrlBarVisible(PANE_ID, visible);
-  });
-}
-
 describe("PaneFrame renders the pane shell", () => {
-  test("starts empty and asks for a URL", () => {
+  test("starts empty and says how to fill it", () => {
     render(<PaneFrame paneId={PANE_ID} />);
-    expect(screen.getByText(/Enter a URL to fill this pane/)).toBeDefined();
+    expect(screen.getByText(/Empty pane\. Right-click here/)).toBeDefined();
+    openMenu();
     expect(urlInput().value).toBe("");
   });
 
@@ -144,6 +151,7 @@ describe("PaneFrame shows an explicit refusal, never a blank box", () => {
 describe("PaneFrame validates input before touching the iframe", () => {
   test("rejects javascript: and reports why", async () => {
     render(<PaneFrame paneId={PANE_ID} />);
+    openMenu();
     await submit("javascript:alert(1)");
 
     const alert = await waitFor(() => screen.getByRole("alert"), WAIT);
@@ -154,6 +162,7 @@ describe("PaneFrame validates input before touching the iframe", () => {
 
   test("rejects an empty submission", async () => {
     render(<PaneFrame paneId={PANE_ID} />);
+    openMenu();
     await submit("   ");
 
     const alert = await waitFor(() => screen.getByRole("alert"), WAIT);
@@ -162,8 +171,8 @@ describe("PaneFrame validates input before touching the iframe", () => {
   });
 });
 
-describe("PaneFrame URL bar visibility", () => {
-  test("hiding the bar keeps the iframe mounted and unchanged", async () => {
+describe("PaneFrame chrome never disturbs the page", () => {
+  test("opening and closing the menu keeps the iframe mounted and unchanged", async () => {
     render(<PaneFrame paneId={PANE_ID} />);
     await submit("https://example.com");
     await waitFor(() => {
@@ -172,15 +181,16 @@ describe("PaneFrame URL bar visibility", () => {
       ).toBe("https://example.com/");
     }, WAIT);
     const before = screen.getByTestId(`pane-frame-${PANE_ID}`);
+    const parentBefore = before.parentNode;
 
-    await setUrlBarVisible(false);
+    openMenu();
+    expect(screen.getByLabelText(`URL for pane ${PANE_ID}`)).toBeDefined();
+    openMenu();
 
-    await waitFor(() => {
-      expect(screen.queryByLabelText(`URL for pane ${PANE_ID}`)).toBeNull();
-    }, WAIT);
+    expect(screen.queryByLabelText(`URL for pane ${PANE_ID}`)).toBeNull();
     const after = screen.getByTestId(`pane-frame-${PANE_ID}`);
     expect(Object.is(before, after)).toBe(true);
+    expect(Object.is(parentBefore, after.parentNode)).toBe(true);
     expect(after.getAttribute("src")).toBe("https://example.com/");
-    expect(screen.getByText("Show URL bar")).toBeDefined();
   });
 });

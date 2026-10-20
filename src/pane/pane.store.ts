@@ -57,6 +57,11 @@ export type WallState = {
   submitUrl: (paneId: PaneId, raw: string) => void;
   reloadPane: (paneId: PaneId) => void;
   clearPane: (paneId: PaneId) => void;
+  /**
+   * No UI caller since the chrome became one strip and a menu: nothing can be
+   * hidden any more. Kept because `urlBarVisible` is a persisted pane column
+   * and a settings key, so dropping it is a schema migration, not a delete.
+   */
   setUrlBarVisible: (paneId: PaneId, visible: boolean) => void;
   /**
    * Switches which renderer serves a pane. Replaces the pane's content, so the
@@ -66,6 +71,14 @@ export type WallState = {
   dispatchLoad: (paneId: PaneId, event: PaneLoadEvent) => void;
   splitPane: (paneId: PaneId, direction: SplitDirection) => void;
   deletePane: (paneId: PaneId) => void;
+  /**
+   * Minimise was removed from the UI with the dock strip: a tiling wall is not
+   * a window manager, split and close cover the need, and restoring put a pane
+   * back in the wrong place. These two have no caller but the layout tests.
+   * Kept rather than deleted because `dock` reaches `layout.types`,
+   * `layout.invariants`, the serializer, the `dock` table and its migration —
+   * removal is a schema change, not a tidy-up.
+   */
   dockPane: (paneId: PaneId) => void;
   undockPane: (
     paneId: PaneId,

@@ -5,7 +5,7 @@
   --noc-text: #d7dce5;
   --noc-muted: #8b93a3;
   --noc-danger: #ff7b72;
-  --noc-chrome-height: 34px;
+  --noc-strip-height: 24px;
   --noc-splitter-size: 6px;
 }
 
@@ -47,18 +47,10 @@ body {
   color: var(--noc-danger);
 }
 
-/* The wall column. The shell takes whatever height the dock strip leaves, so a
-   docked pane's entry is never covered by a pane — a native webview would paint
-   straight over it. */
-.noc-wall {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-/* Shared coordinate space for both layers. Pane hosts are positioned against
-   this box, so it must be the containing block. */
+/* Shared coordinate space for both layers, and the whole wall: it is a direct
+   child of `.noc-root`, taking whatever height the persistence notice leaves.
+   Pane hosts are positioned against this box, so it must be the containing
+   block. */
 .noc-shell {
   position: relative;
   flex: 1;
@@ -152,7 +144,11 @@ body.noc-resizing .noc-pane__frame {
   pointer-events: auto;
 }
 
+/* `relative` so the menu panel can be positioned against the pane. The panel is
+   the single exception to "chrome is never an overlay", and it pays for it by
+   hiding every native webview for as long as it is open — see `pane.menu`. */
 .noc-pane {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -161,17 +157,87 @@ body.noc-resizing .noc-pane__frame {
   border: 1px solid var(--noc-border);
 }
 
-/* The URL bar is a sibling of the frame, never an overlay: a native webview
-   sits above the web layer and ignores CSS clipping, so anything drawn on top
-   of a pane would be invisible once the webview renderer lands. */
-.noc-pane__chrome {
+.noc-pane__menu-root {
+  flex: 0 0 auto;
+}
+
+/* The only permanent chrome a pane has. It is a sibling above the body, never
+   an overlay: a native webview sits above the web layer and ignores CSS
+   clipping, so a strip drawn over the pane would not be there. Thin on purpose
+   — this cost is paid once per pane, and a wall has many. */
+.noc-pane__strip {
   display: flex;
   gap: 6px;
   align-items: center;
-  padding: 4px 6px;
-  height: var(--noc-chrome-height);
+  justify-content: space-between;
+  padding: 0 2px 0 8px;
+  height: var(--noc-strip-height);
   background: var(--noc-chrome);
   border-bottom: 1px solid var(--noc-border);
+}
+
+/* Ellipsis rather than wrap: the strip's height is what keeps it cheap. */
+.noc-pane__strip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--noc-muted);
+  font-size: 11px;
+}
+
+.noc-pane__strip-button {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  color: var(--noc-text);
+  background: none;
+  border: 0;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Spans the pane rather than sizing to its contents, so the URL field is as
+   wide as the pane allows instead of as wide as the leftovers. */
+.noc-pane__menu {
+  position: absolute;
+  top: var(--noc-strip-height);
+  right: 0;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: var(--noc-chrome);
+  border-bottom: 1px solid var(--noc-border);
+}
+
+.noc-pane__menu-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.noc-pane__menu-item {
+  padding: 4px 8px;
+  color: var(--noc-text);
+  background: var(--noc-bg);
+  border: 1px solid var(--noc-border);
+  border-radius: 4px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.noc-pane__menu-error {
+  color: var(--noc-danger);
+}
+
+/* The suppressor's iframe arm sets `user-select: none` on <body>, and the menu
+   holds it open the whole time it is up. Without this the address in the field
+   could not be selected while editing it. */
+body.noc-resizing .noc-pane__menu {
+  user-select: text;
 }
 
 .noc-pane__input {
@@ -195,12 +261,10 @@ body.noc-resizing .noc-pane__frame {
   cursor: pointer;
 }
 
-/* A select sizes itself to its widest option, and the renderer labels carry
-   their own warnings, so left alone this would push the URL input out of a
-   narrow pane. Capped here; the full wording is still readable in the open
-   list, which is where the choice is actually made. */
+/* Its own row in the panel, so the renderer labels no longer have to compete
+   with the URL field for width. */
 .noc-pane__select {
-  max-width: 16ch;
+  text-align: left;
 }
 
 /* Frame and status share one grid cell instead of being stacked with absolute
@@ -269,56 +333,8 @@ body.noc-no-pane-cursor .noc-pane-host {
   color: var(--noc-muted);
 }
 
-/* Mirrors the URL bar, under the body instead of over it. Same reasoning: a
-   sibling row, never an overlay. */
-.noc-pane__controls {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 4px 6px;
-  height: var(--noc-chrome-height);
-  background: var(--noc-chrome);
-  border-top: 1px solid var(--noc-border);
-}
-
 .noc-pane__button--danger {
   color: var(--noc-danger);
-}
-
-/* Outside the shell on purpose — see `pane.dock.tsx`. */
-.noc-dock {
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 10px;
-  background: var(--noc-chrome);
-  border-top: 1px solid var(--noc-border);
-}
-
-.noc-dock__label {
-  color: var(--noc-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 11px;
-}
-
-.noc-dock__entry {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 2px 4px 2px 8px;
-  border: 1px solid var(--noc-border);
-  border-radius: 4px;
-}
-
-.noc-dock__title {
-  max-width: 28ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .noc-error {
