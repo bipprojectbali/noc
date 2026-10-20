@@ -365,18 +365,7 @@ every fixture in the suite was written by hand. Nor has the row been seen: not
 its place in the 224px dropdown, not the file dialog over a native pane, not
 the outcome text at that width when several domains failed.
 
-There is also one gap that is not about pixels. `session.store-contract.ts` is
-a module-level registry with a no-op default, written so the menu item could be
-built against a contract while the store was built beside it. Nothing in `src/`
-calls `setSessionImportHook` — only the tests do — so in the running app the
-row renders, opens a file picker, and then does nothing at all, silently: the
-state stays `idle`, which prints no message. The store is complete; it is
-simply not connected.
-
-**Next step.** Connect the store first — point the registry at `useSessionStore`
-where the app starts, or delete the registry and have the menu item import the
-store directly, which is what its own docblock says should happen at
-integration. Then `bun run tauri:dev` with two native panes on a site you are
+**Next step.** `bun run tauri:dev` with two native panes on a site you are
 signed into in your own browser, export that browser's cookies, and import
 them. Three things to watch: that the count reported is plausible rather than
 zero, that the panes come back signed in after the automatic reload, and that
