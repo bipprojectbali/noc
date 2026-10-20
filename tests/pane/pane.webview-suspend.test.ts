@@ -53,7 +53,9 @@ function visibleSentFor(calls: Call[], paneId: PaneId): number {
 async function visiblePane(paneId: PaneId, rect: { current: NativeRect }) {
   const { bridge, calls } = recordingBridge();
   const renderer = createPaneWebviewRenderer({ bridge, readRect: () => rect.current });
-  renderer.registerAnchor(paneId, document.createElement("div"));
+  // One site per pane here, with the pane's own id: this renderer is driven
+  // directly and the webview's label is the site, not the pane.
+  renderer.registerAnchor(paneId, paneId, document.createElement("div"));
   renderer.setUrl(paneId, "https://example.com/");
   renderer.place(paneId, true);
   await settle();
@@ -132,7 +134,7 @@ describe("a drag hides the webviews and the end of the drag shows them", () => {
     const { bridge, calls } = recordingBridge();
     const rect = { current: START };
     const renderer = createPaneWebviewRenderer({ bridge, readRect: () => rect.current });
-    renderer.registerAnchor("p2", document.createElement("div"));
+    renderer.registerAnchor("p2", "p2", document.createElement("div"));
     renderer.setUrl("p2", "https://example.com/");
     renderer.place("p2", false);
     await settle();

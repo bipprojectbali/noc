@@ -52,10 +52,20 @@ import {
 import { usePaneDragHandle } from "./pane.drag.ts";
 import { usePaneMenuDismiss } from "./pane.menu-dismiss.ts";
 import { PaneMenuPanel } from "./pane.menu-panel.tsx";
+import {
+  PaneSiteSwitcher,
+  type PaneSitesControl,
+} from "./pane.site-switcher.tsx";
 
 export type PaneMenuProps = {
   paneId: PaneId;
   url: string | null;
+  /**
+   * The pages this pane holds. The switcher that shows them is a sibling of ⋮
+   * inside this one chrome box, so it inherits `floating` rather than deciding
+   * it again — a second shape over a native webview would not be visible at all.
+   */
+  sites: PaneSitesControl;
   error: string | null;
   strategy: PaneStrategy;
   /**
@@ -82,6 +92,7 @@ export type PaneMenuProps = {
 export function PaneMenu({
   paneId,
   url,
+  sites,
   open,
   floating,
   onOpenChange,
@@ -124,6 +135,10 @@ export function PaneMenu({
         onOpenChange(true);
       }}
     >
+      {/* Before ⋮ in DOM order, so tab order and the row read left to right:
+          which page is showing, then what can be done to the pane. */}
+      <PaneSiteSwitcher paneId={paneId} sites={sites} />
+
       <button
         className="noc-pane__menu-button"
         ref={buttonRef}
@@ -138,7 +153,9 @@ export function PaneMenu({
         ⋮
       </button>
 
-      {open && <PaneMenuPanel paneId={paneId} url={url} {...panel} />}
+      {open && (
+        <PaneMenuPanel paneId={paneId} url={url} sites={sites} {...panel} />
+      )}
     </div>
   );
 }

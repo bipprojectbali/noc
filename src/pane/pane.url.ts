@@ -39,3 +39,20 @@ export function normalizePaneUrl(input: string): PaneUrlResult {
 
   return { ok: true, url: parsed.toString() };
 }
+
+/**
+ * The host, for the places a pane names a page in one word: a drop ring's
+ * label, a site switch's tooltip, a refusal message.
+ *
+ * Falls back to the whole string rather than throwing. Everything the UI shows
+ * came through `normalizePaneUrl` and parses — but it may have come through it
+ * weeks ago and arrived back from the database since, and a URL that fails to
+ * parse in a render blanks the wall.
+ */
+export function urlHostLabel(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
