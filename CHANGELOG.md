@@ -41,19 +41,28 @@
   dozen live pages costs has not been measured — see "Open items" in the
   README.
 
-- A site on the wall can reach the camera and the microphone. One using
-  `getUserMedia` used to report "device not found" in a loop, which was not a
-  refusal: it was asking a context that had never been allowed to ask, so it
-  was handed no devices to find. Framed panes are now allowed to ask for both.
+- A site on the wall can reach the camera and the microphone, and this has now
+  been watched working: a real camera, in a real browser, inside a pane, on
+  every address the wall answers to. Framed panes are allowed to ask for both.
+  A site can no longer take that back, either — a page may carry a policy of
+  its own that switches capture off for itself whatever the pane allowed, and
+  a site served through the wall's own address has those two permissions
+  stripped from that policy, leaving everything else it asked for standing.
+  Opened at `127.0.0.1` the site's veto still holds, because nothing is
+  rewritten there.
+  Correcting what the previous note here claimed: the "device not found" loop
+  that prompted this was read as a refusal of permission, and it was not. That
+  failure could not be reproduced once, and a pane denied permission fails with
+  a different error entirely, so its cause is still unknown. If it comes back,
+  the cheapest thing that tells the two apart is whether the page can list any
+  devices at all.
   For the desktop app the answer was a layer lower — macOS hands no devices
-  at all to an app that does not declare why it wants them — so the app now
+  at all to an app that does not declare why it wants them — so the app
   declares it and carries the entitlements signing needs. Those only exist in
-  a built app: `bun run tauri:dev` does not make one, so capture will keep
-  failing there and that failure means nothing. Nothing has yet seen a device
-  arrive, or a macOS prompt appear, under either renderer; see "Open items".
-  Note while this is new: any page on the wall may ask, there is no per-pane
-  switch for it, and inside the desktop app the request is granted without
-  asking you.
+  a built app, and no built app has been run, so nothing is known about capture
+  there. Note while this is new: any page on the wall may ask, there is no
+  per-pane switch for it, and inside the desktop app the request is granted
+  without asking you.
 
 - Rearrange the wall by dragging a pane. The handle is the same ⋮ the menu
   hangs from: press it and let go and you get the menu as before, press it and
