@@ -14,6 +14,7 @@ import {
   setPaneUrlBarVisible,
   splitPane,
 } from "../layout/layout.tree.ts";
+import { movePane, swapPanes } from "../layout/layout.move.ts";
 import {
   deletePane,
   dockPane,
@@ -34,6 +35,8 @@ import {
   type PaneLoadState,
 } from "./pane.load-state.ts";
 import type { PersistenceStatus } from "../persist/persist.status.ts";
+import type { DropZone } from "./pane.drag-geometry.ts";
+import { makeId, nextCreatedAt } from "./pane.ids.ts";
 import { fetchEmbeddability } from "./pane.probe-client.ts";
 import { paneRendererFor, releasePane, rendererChange } from "./pane.renderer.ts";
 import { normalizePaneUrl } from "./pane.url.ts";
@@ -71,6 +74,14 @@ export type WallState = {
   setPaneStrategy: (paneId: PaneId, strategy: PaneStrategy) => void;
   dispatchLoad: (paneId: PaneId, event: PaneLoadEvent) => void;
   splitPane: (paneId: PaneId, direction: SplitDirection) => void;
+  /**
+   * Lands a finished pane drag: an edge drops the pane on that side of the
+   * target, the middle trades the two places. One `set` for the whole move —
+   * detaching and re-inserting in two commits would leave a frame where the
+   * pane holds no slot, and a pane with no slot is hidden, which blinks its
+   * webview. A refusal leaves the wall exactly as it was.
+   */
+  rearrangePane: (paneId: PaneId, targetPaneId: PaneId, zone: DropZone) => void;
   deletePane: (paneId: PaneId) => void;
   /**
    * Minimise was removed from the UI with the dock strip: a tiling wall is not
@@ -88,28 +99,6 @@ export type WallState = {
   ) => void;
   resizeSplit: (splitId: NodeId, firstFraction: number) => void;
 };
-
-function makeId(): string {
-  return crypto.randomUUID();
-}
-
-let lastCreatedAt = 0;
-
-/**
- * Wall-clock time, forced to strictly increase.
- *
- * `createdAt` is the pane layer's entire ordering key, and `Date.now()` only
- * resolves to the millisecond. Two panes created inside one millisecond tie, and
- * `pane.layer` then breaks the tie on the random id — so the newer pane sorts
- * first about half the time, which moves a host that is already mounted. Moving
- * a host re-inserts its iframe, and a re-inserted iframe reloads the page inside
- * it: exactly what the two-layer design exists to prevent. A pane created later
- * must therefore always carry a larger number than every pane before it.
- */
-function nextCreatedAt(): number {
-  lastCreatedAt = Math.max(Date.now(), lastCreatedAt + 1);
-  return lastCreatedAt;
-}
 
 export function paneLoadState(state: WallState, paneId: PaneId): PaneLoadState {
   return state.load[paneId] ?? INITIAL_PANE_LOAD_STATE;
@@ -255,6 +244,21 @@ export const useWallStore = create<WallState>((set, get) => {
       set((state) => ({
         tree: splitPane(state.tree, paneId, direction, makeId, nextCreatedAt()),
       }));
+    },
+
+    rearrangePane: (paneId, targetPaneId, zone) => {
+      set((state) => {
+        // A drop target is read off the DOM and can be deleted mid-drag; the
+        // tree throws on an unknown id rather than refusing one.
+        const ends = [state.tree.nodes[paneId], state.tree.nodes[targetPaneId]];
+        if (!ends.every((node) => node !== undefined && isPane(node))) return {};
+
+        const result =
+          zone === "center"
+            ? swapPanes(state.tree, paneId, targetPaneId)
+            : movePane(state.tree, paneId, targetPaneId, zone, makeId);
+        return result.ok ? { tree: result.tree } : {};
+      });
     },
 
     deletePane: (paneId) => {
