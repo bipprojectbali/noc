@@ -163,14 +163,24 @@ body.noc-resizing .noc-pane__frame {
 
 /* The iframe case, and the point of the redesign: zero reserved height, so a
    pane's body runs edge to edge and a grid of panes stops looking stitched.
-   Shrink-wrapped and absolutely positioned, so the only part of the page it
-   can cover is the 24px square the button occupies. */
+   Counting its padding the box is 40px square, and the top-right corner is
+   where a monitoring dashboard keeps its own refresh and range controls — so
+   the container takes no pointer at all and hands it back only to the parts
+   that are really there. The page loses the button's 24px and nothing else.
+   The cost is that right-click lands on the chrome only over the button
+   itself; the padding belongs to the page again. */
 .noc-pane__chrome--floating {
   position: absolute;
   top: 0;
   right: 0;
   z-index: 2;
   padding: 8px;
+  pointer-events: none;
+}
+
+.noc-pane__chrome--floating .noc-pane__menu-button,
+.noc-pane__chrome--floating .noc-pane__menu {
+  pointer-events: auto;
 }
 
 /* The webview case. A native child webview paints above the whole web layer

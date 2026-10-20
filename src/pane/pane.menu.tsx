@@ -7,7 +7,9 @@
  * The button floats over the pane's top-right corner, nearly invisible until
  * the pane is hovered, the button takes focus, or the menu is open. Its own
  * dark backdrop and light ring keep it legible over a white dashboard and a
- * dark one alike, and it covers one 24px square of the page.
+ * dark one alike. Its container is wider than the button, so the container
+ * takes no pointer at all and the page loses the button's 24px square and
+ * nothing more — a dashboard keeps its own controls in that very corner.
  *
  * Floating is only legal over an iframe. A native child webview is an OS-level
  * view that paints above the whole web layer and ignores CSS clipping, so a
@@ -19,18 +21,19 @@
  *
  * The panel is an overlay in both cases, the one thing this codebase otherwise
  * forbids. Its licence is `suspendPanePointerCapture`: while it is open every
- * webview on the wall is hidden, the same seam splitter drags already use. The
- * consequence is deliberate — open one menu, every webview pane goes blank —
- * and hiding is not destroying, so those pages keep running and come back at
- * the same scroll position. The suppressor's iframe arm earns its keep too: it
- * drops `pointer-events` on every frame, so a click meant to dismiss the panel
- * reaches this document instead of a cross-origin iframe.
+ * webview is hidden and every iframe stops taking the pointer, the same seam
+ * splitter drags already use — which is also how a click meant to dismiss the
+ * panel reaches this document rather than a cross-origin frame. Open one menu
+ * and every webview pane goes blank: deliberate, and hiding is not destroying,
+ * so those pages keep running and come back at the same scroll position.
  *
- * Right-click opens the same menu, but only on surfaces this app owns — the
- * chrome, and the empty area of an empty pane, which `pane.frame` wires. Over a
- * loaded site there is nothing to hook: a cross-origin iframe never hands its
- * `contextmenu` to the parent, and a native webview takes the event at OS level
- * where the web layer never sees it.
+ * Right-click opens the same menu on surfaces this app owns: an empty pane's
+ * message (`pane.frame` wires it) and, on a floating chrome, the button alone,
+ * since the box around it is transparent to the pointer. The handler stays on
+ * the container because the button's events bubble to it anyway. Over a loaded
+ * site there is nothing to hook — a cross-origin iframe never hands its
+ * `contextmenu` to the parent, a native webview takes the event at OS level —
+ * so a loaded pane is reached through ⋮ and nothing else.
  */
 
 import { useEffect, useRef } from "react";

@@ -143,6 +143,18 @@ describe("⋮ is the only permanent chrome, and it opens the rest", () => {
     expect(screen.getByTestId(`pane-menu-${ROOT}`)).toBeDefined();
   });
 
+  test("right-click on ⋮ itself opens it too", () => {
+    render(<AppShell />);
+
+    // On a floating chrome the padding around the button is transparent to the
+    // pointer, so the button is the only part of the chrome a right-click can
+    // land on. The handler stays on the container and the event bubbles to it;
+    // this is what says the ⋮ still answers once its box stops taking input.
+    fireEvent.contextMenu(screen.getByTestId(`pane-menu-button-${ROOT}`));
+
+    expect(screen.getByTestId(`pane-menu-${ROOT}`)).toBeDefined();
+  });
+
   test("right-click on an empty pane's body opens it too", () => {
     render(<AppShell />);
 

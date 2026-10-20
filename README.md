@@ -269,7 +269,7 @@ position. No fourth `invoke` and no native menu were added — the cheap path
 first, revisited only if the blanking proves annoying.
 
 **Not known.** Everything visual. The suite runs under happy-dom, which measures
-every element at zero width and height, so none of its 215 passing assertions
+every element at zero width and height, so none of its 216 passing assertions
 says that an iframe pane's body really runs edge to edge, that the ⋮ is legible
 over an actual bright website or lost over a dark one, that 14% opacity is
 "nearly invisible" rather than "invisible", that the 224px dropdown fits inside
