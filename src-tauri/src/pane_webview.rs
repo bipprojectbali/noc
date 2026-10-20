@@ -49,24 +49,44 @@ impl PaneRect {
     }
 }
 
-/// Height of the window chrome above the page, in logical pixels.
+/// How much of the window's content area the title bar covers, in logical
+/// pixels. The page's own origin starts below it, a child webview's does not.
 ///
-/// The page measures its rect from below the title bar, but a child webview is
-/// positioned from the window frame, which still includes the title bar. Left
-/// alone, every pane would sit one title bar too high and cover the URL bar.
-/// The gap is read from the window itself: the outer frame minus the content
-/// area. Nothing here is a hardcoded title bar height.
+/// Tauri's default macOS title bar style asks for `fullSizeContentView`, so the
+/// content view reaches up behind the title bar: measured here, a frame 875 tall
+/// has a content view 875 tall and a `contentLayoutRect` of 847. The page is
+/// pushed below the bar because WebKit honours the safe area, but wry places a
+/// child webview in raw content-view coordinates — so a rect the page measured
+/// lands one title bar too high, over the pane's own URL bar.
+///
+/// The earlier attempt at this used `outer_size - inner_size`, which is 0 here
+/// precisely because the content view already spans the frame. `contentLayoutRect`
+/// is the part of it the title bar leaves alone, and is the one number that is
+/// non-zero. It is 0 on a window without that style, which is what we want.
+#[cfg(target_os = "macos")]
 fn chrome_height(window: &Window<Wry>) -> Result<f64, String> {
-    let outer = window
-        .outer_size()
-        .map_err(|error| format!("Cannot read the wall window size: {error}"))?;
-    let inner = window
-        .inner_size()
-        .map_err(|error| format!("Cannot read the wall window content size: {error}"))?;
-    let scale = window
-        .scale_factor()
-        .map_err(|error| format!("Cannot read the wall window scale: {error}"))?;
-    Ok(f64::from(outer.height.saturating_sub(inner.height)) / scale)
+    use objc2_app_kit::NSWindow;
+
+    let ns_window = window
+        .ns_window()
+        .map_err(|error| format!("Cannot reach the wall window: {error}"))?
+        as *const NSWindow;
+    // Tauri hands us the window it owns, and commands run on the main thread,
+    // which is the only one allowed to read AppKit geometry.
+    let ns_window = unsafe { &*ns_window };
+    let content = ns_window
+        .contentView()
+        .ok_or_else(|| "The wall window has no content view".to_string())?;
+    let layout = ns_window.contentLayoutRect();
+    let covered = content.frame().size.height - (layout.origin.y + layout.size.height);
+    Ok(covered.max(0.0))
+}
+
+/// Elsewhere a child webview is already placed from the client area, so the
+/// page's origin and the webview's origin are the same point.
+#[cfg(not(target_os = "macos"))]
+fn chrome_height(_window: &Window<Wry>) -> Result<f64, String> {
+    Ok(0.0)
 }
 
 /// Pane ids come from the wall page, which is loaded over http. Restricting the

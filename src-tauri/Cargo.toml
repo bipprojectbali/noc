@@ -16,6 +16,13 @@ tauri = { version = "2.10", features = ["unstable"] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 
+# Tauri gives no portable way to ask how much of the window's content area the
+# title bar covers, and on macOS that number is what a child webview has to be
+# pushed down by. See `chrome_height` in `src/pane_webview.rs`. Same versions
+# tao and wry already pull in, so this costs no extra build.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSView", "NSResponder"] }
+
 [profile.release]
 codegen-units = 1
 lto = true
