@@ -1,10 +1,28 @@
-//! One native child webview per pane.
+//! Two native child webviews per pane: the page, and the ⋮ that operates it.
 //!
 //! A child webview loads its URL as a top-level document, so `X-Frame-Options`
 //! and CSP `frame-ancestors` do not apply to it — that is the reason this shell
 //! exists. The cost is that it is an OS-level view, not a DOM node: it always
-//! paints above the web layer and ignores CSS clipping, so the wall positions it
-//! explicitly and never tries to draw anything on top of it.
+//! paints above the web layer and ignores CSS clipping, so nothing the wall page
+//! draws can be seen on top of one.
+//!
+//! That is why the pane's chrome is a webview too. The wall page draws a
+//! floating ⋮ in every pane's top-right corner, and over an iframe that is all
+//! it takes; over a child webview the button is not dim or behind, it is absent.
+//! The alternative this replaces was a 20px row reserved above the page — space
+//! the pane could not spend on content, which is what made a wall of webview
+//! panes read as stitched together out of boxes. A second child webview, 40px
+//! square, costs no space at all: wry appends each child with `addSubview`, so
+//! creation order is paint order and a chrome created after its page sits above
+//! it. It is transparent, it is same-origin with the wall page (the sidecar
+//! serves it), and a click on it reaches the wall over a `BroadcastChannel` —
+//! so it needs no command of its own, and the frontend→native surface stays at
+//! four. See `src/pane/pane.chrome-channel.ts` for the other end.
+//!
+//! Everything below therefore comes in pairs: a pane that is shown, moved,
+//! hidden or closed takes its chrome with it, and the frontend never learns
+//! that the chrome exists. It sends one rect per pane, as it always did, and
+//! the corner is derived from it here.
 //!
 //! A webview is created once per pane and then only moved, hidden or navigated.
 //! Destroying and rebuilding one would reload the page, which is the single
@@ -40,6 +58,16 @@ use tauri::{
 use crate::sidecar::WALL_WINDOW_LABEL;
 
 const PANE_LABEL_PREFIX: &str = "pane-";
+/// Prefixed onto the pane's own label, so the two are one lookup apart.
+const CHROME_LABEL_PREFIX: &str = "chrome-";
+/// Must stay in step with `PANE_CHROME_PATH` in `src/server/server.chrome-page.ts`.
+const CHROME_PATH: &str = "/pane-chrome";
+/// The side of the chrome webview, logical pixels.
+///
+/// It stands in for the floating ⋮ box the web layer draws over an iframe pane,
+/// which is 40px square counting its padding — same number so that the moment
+/// the webviews hide and the DOM chrome appears, the button does not move.
+const CHROME_BOX: f64 = 40.0;
 
 /// The address each pane's webview was last sent to.
 ///
@@ -111,6 +139,26 @@ impl PaneRect {
             size: Size::Logical(self.size()),
         }
     }
+
+    /// The corner the chrome webview occupies, or `None` when there is no room.
+    ///
+    /// Clamped to the pane rather than allowed to overhang it: the narrowest
+    /// pane the wall will make is about 96px, but a pane mid-drag or mid-layout
+    /// can measure anything at all, and a chrome wider than its own pane would
+    /// sit over the neighbour and take that pane's clicks. A rect with no area
+    /// has no corner — the pane is not on screen, so neither is its button.
+    fn chrome_corner(self) -> Option<PaneRect> {
+        let side = CHROME_BOX.min(self.width).min(self.height);
+        if side <= 0.0 {
+            return None;
+        }
+        Some(PaneRect {
+            x: self.x + self.width - side,
+            y: self.y,
+            width: side,
+            height: side,
+        })
+    }
 }
 
 /// How much of the window's content area the title bar covers, in logical
@@ -166,6 +214,64 @@ fn pane_label(pane_id: &str) -> Result<String, String> {
     Ok(format!("{PANE_LABEL_PREFIX}{pane_id}"))
 }
 
+/// The chrome webview's own label. Derived from the pane's, which has already
+/// been through `pane_label`, so the alphabet is still safe.
+fn chrome_label(pane_label: &str) -> String {
+    format!("{CHROME_LABEL_PREFIX}{pane_label}")
+}
+
+/// Where the chrome page lives, taken from the wall window rather than stored.
+///
+/// The sidecar takes an ephemeral port, so the origin is only known at runtime —
+/// and asking the window for it means a sidecar that came back on another port
+/// cannot leave this pointing at the old one. `pane_id` reached us through
+/// `pane_label`, which allows ASCII alphanumerics, `-` and `_` only, so it needs
+/// no escaping to go in a query string.
+fn chrome_url(app: &AppHandle, pane_id: &str) -> Result<tauri::Url, String> {
+    let wall = app
+        .get_webview_window(WALL_WINDOW_LABEL)
+        .ok_or_else(|| "The wall window is not open".to_string())?;
+    let mut url = wall
+        .url()
+        .map_err(|error| format!("Cannot read the wall's own address: {error}"))?;
+    url.set_path(CHROME_PATH);
+    url.set_query(Some(&format!("site={pane_id}")));
+    url.set_fragment(None);
+    Ok(url)
+}
+
+/// Creates the pane's chrome webview if it has none yet.
+///
+/// Called after the page's webview, always, because that order is the paint
+/// order: wry appends children with `addSubview`, so the last one created is the
+/// top one. A chrome that cannot be built is reported but not fatal — a pane
+/// showing its page with no ⋮ is worth more than a pane that refused to open,
+/// and the wall page's own hidden ⋮ comes back as soon as a menu is opened
+/// anywhere.
+fn ensure_chrome(app: &AppHandle, pane_id: &str, label: &str, rect: PaneRect) {
+    let label = chrome_label(label);
+    if pane_webview(app, &label).is_some() {
+        return;
+    }
+    let Some(corner) = rect.chrome_corner() else {
+        return;
+    };
+    let built = chrome_url(app, pane_id).and_then(|url| {
+        let window = wall_window(app)?;
+        let offset = chrome_height(&window)?;
+        window
+            .add_child(
+                WebviewBuilder::new(&label, WebviewUrl::External(url)).transparent(true),
+                corner.position(offset),
+                corner.size(),
+            )
+            .map_err(|error| error.to_string())
+    });
+    if let Err(error) = built {
+        eprintln!("Pane {pane_id} could not get its chrome button: {error}");
+    }
+}
+
 fn wall_window(app: &AppHandle) -> Result<Window<Wry>, String> {
     app.get_window(WALL_WINDOW_LABEL)
         .ok_or_else(|| "The wall window is not open".to_string())
@@ -211,19 +317,24 @@ pub fn pane_webview_show(
                 .map_err(|error| format!("Pane {pane_id} could not navigate: {error}"))?;
             history.remember(&label, &url);
         }
-        return place(&webview, &pane_id, rect, true);
+        // Not only on the create path: a pane whose chrome failed to build, or
+        // one first shown while it had no area to put a corner in, gets one here.
+        ensure_chrome(&app, &pane_id, &label, rect);
+        return place_pane(&app, &pane_id, &label, rect, true);
     }
 
     let window = wall_window(&app)?;
-    let chrome = chrome_height(&window)?;
+    let offset = chrome_height(&window)?;
     window
         .add_child(
             WebviewBuilder::new(&label, WebviewUrl::External(target)),
-            rect.position(chrome),
+            rect.position(offset),
             rect.size(),
         )
         .map_err(|error| format!("Pane {pane_id} could not get a webview: {error}"))?;
     history.remember(&label, &url);
+    // After the page and never before it: creation order is paint order.
+    ensure_chrome(&app, &pane_id, &label, rect);
     Ok(())
 }
 
@@ -240,19 +351,27 @@ pub fn pane_webview_place(
     visible: bool,
 ) -> Result<(), String> {
     let label = pane_label(&pane_id)?;
-    let Some(webview) = pane_webview(&app, &label) else {
+    if pane_webview(&app, &label).is_none() {
         return Ok(());
-    };
-    place(&webview, &pane_id, rect, visible)
+    }
+    place_pane(&app, &pane_id, &label, rect, visible)
 }
 
-/// Destroys the pane's webview. Only a deleted pane should ever reach this.
+/// Destroys the pane's webview and its chrome. Only a deleted pane reaches this.
 #[tauri::command]
 pub fn pane_webview_close(app: AppHandle, pane_id: String) -> Result<(), String> {
     let label = pane_label(&pane_id)?;
     // Dropped before the webview is, so a pane id that comes back around (a
     // close that raced a create) cannot inherit the old address as "current".
     app.state::<PaneNavigations>().forget(&label);
+    // The chrome goes first and unconditionally: left behind it would be a
+    // button floating over whatever pane moves into that space, and it holds no
+    // state worth keeping — it is a 40px page with one button on it.
+    if let Some(chrome) = pane_webview(&app, &chrome_label(&label)) {
+        if let Err(error) = chrome.close() {
+            eprintln!("Pane {pane_id} could not drop its chrome button: {error}");
+        }
+    }
     let Some(webview) = pane_webview(&app, &label) else {
         return Ok(());
     };
@@ -261,15 +380,43 @@ pub fn pane_webview_close(app: AppHandle, pane_id: String) -> Result<(), String>
         .map_err(|error| format!("Pane {pane_id} could not be closed: {error}"))
 }
 
+/// Moves and shows the page and its chrome together.
+///
+/// The chrome follows the page's visibility exactly, which is what makes the
+/// pointer suppressor work on it for free: a splitter drag, an open menu or a
+/// pane being carried hides every pane webview, and the ⋮ has to go with them —
+/// it is an OS-level view too, so a drop overlay drawn under it would be the
+/// one thing on the wall it could not cover.
+fn place_pane(
+    app: &AppHandle,
+    pane_id: &str,
+    label: &str,
+    rect: PaneRect,
+    visible: bool,
+) -> Result<(), String> {
+    if let Some(chrome) = pane_webview(app, &chrome_label(label)) {
+        let corner = rect.chrome_corner();
+        // No corner means no area, which is already "not on screen".
+        let placed = place(&chrome, pane_id, corner.unwrap_or(rect), visible && corner.is_some());
+        if let Err(error) = placed {
+            eprintln!("Pane {pane_id} could not place its chrome button: {error}");
+        }
+    }
+    let Some(webview) = pane_webview(app, label) else {
+        return Ok(());
+    };
+    place(&webview, pane_id, rect, visible)
+}
+
 fn place(
     webview: &Webview<Wry>,
     pane_id: &str,
     rect: PaneRect,
     visible: bool,
 ) -> Result<(), String> {
-    let chrome = chrome_height(&webview.window())?;
+    let offset = chrome_height(&webview.window())?;
     webview
-        .set_bounds(rect.bounds(chrome))
+        .set_bounds(rect.bounds(offset))
         .map_err(|error| format!("Pane {pane_id} could not be placed: {error}"))?;
     let shown = if visible { webview.show() } else { webview.hide() };
     shown.map_err(|error| format!("Pane {pane_id} could not change visibility: {error}"))

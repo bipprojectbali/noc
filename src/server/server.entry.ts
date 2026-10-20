@@ -6,6 +6,7 @@
 
 import index from "../../index.html";
 import { readConfig } from "../config/config.env.ts";
+import { PANE_CHROME_PATH, handlePaneChrome } from "./server.chrome-page.ts";
 import { watchParentProcess } from "./server.parent-watch.ts";
 import { readyLine } from "./server.ready.ts";
 import {
@@ -46,6 +47,9 @@ try {
     routes: {
       [EMBEDDABILITY_PATH]: handleEmbeddability,
       [SELF_TEST_PATH]: handleSelfTest,
+      // Before the catch-all below, which is the wall page itself: this one is
+      // loaded by the shell into a 40px child webview, not by a browser.
+      [PANE_CHROME_PATH]: handlePaneChrome,
       [WALL_PATH]: { GET: wall.getWall, PUT: wall.putWall },
       [WALL_VIEWS_PATH]: { GET: wall.listViews },
       [WALL_VIEW_PATH]: {
