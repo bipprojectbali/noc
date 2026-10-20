@@ -6,6 +6,7 @@ import { useWallStore } from "../pane/pane.store.ts";
 import { createWallClient } from "../persist/persist.client.ts";
 import { PersistenceNotice } from "../persist/persist.notice.tsx";
 import { startWallPersistence } from "../persist/persist.sync.ts";
+import { ProxyHostNotice } from "../proxy/proxy.notice.tsx";
 import { createAppRouter } from "./app.router.tsx";
 
 const container = document.getElementById("root");
@@ -26,6 +27,7 @@ createRoot(container).render(
   <StrictMode>
     <div className="noc-root">
       <PersistenceNotice />
+      <ProxyHostNotice />
       <RouterProvider router={createAppRouter()} />
     </div>
   </StrictMode>,
