@@ -37,6 +37,7 @@ import type { PersistenceStatus } from "../persist/persist.status.ts";
 import { fetchEmbeddability } from "./pane.probe-client.ts";
 import { paneRendererFor, releasePane, rendererChange } from "./pane.renderer.ts";
 import { normalizePaneUrl } from "./pane.url.ts";
+import { paneWebviewRenderer } from "./pane.webview-renderer.ts";
 
 export type WallState = {
   tree: LayoutTree;
@@ -194,6 +195,10 @@ export const useWallStore = create<WallState>((set, get) => {
       if (before.kind === "empty") return;
       get().dispatchLoad(paneId, { type: "reload" });
       probe(paneId, before.url);
+      // An iframe reloads on its own: `probing` takes its `src` away and the
+      // next state puts it back. A webview keeps the same url throughout, so
+      // nothing navigates unless it is told to.
+      if (rendersAsWebview(paneId)) paneWebviewRenderer.reopen(paneId);
     },
 
     clearPane: (paneId) => {
