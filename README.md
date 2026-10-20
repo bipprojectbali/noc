@@ -7,15 +7,28 @@ Router (library mode) and Zustand.
 
 The wall renders a tree of panes with a draggable splitter between every pair.
 Splits and deletion are wired through the store and proven not to disturb a
-pane's iframe. A pane's whole chrome is now one ⋮ button, floating over the
-top-right corner of an iframe pane and costing it no height at all; it opens a
-dropdown holding the address field, the renderer picker, Reload, Split right,
-Split down and Close. Each pane can be drawn as an iframe or as a native
-webview, and a webview pane keeps a 20px seam for its button because an
-OS-level view cannot be drawn over. The menu also carries Import cookies, which
-signs every native pane in at once from a browser export. All of it is built
-and unit-tested; none of it has been seen on screen. The desktop shell is real:
-it runs the server as a sidecar and puts a native webview in each pane.
+pane's iframe. Panes can also be rearranged after the fact: drag one by its ⋮
+onto another pane's edge to land beside it, or onto its middle to trade the two
+places, with no page reloading either way. A pane's whole chrome is now one ⋮
+button, floating over the top-right corner of an iframe pane and costing it no
+height at all; it opens a dropdown holding the address field, the renderer
+picker, Reload, Split right, Split down and Close. Each pane can be drawn as an
+iframe or as a native webview, and a webview pane keeps a 20px seam for its
+button because an OS-level view cannot be drawn over. A pane can also hold
+several pages at once: every one of them stays loaded, the switch sits on the
+pane next to ⋮ in the same shape — a dot per page while there are four or
+fewer, a `3/8` chip that steps and wraps past that — and the page being left
+is hidden rather than torn down. Every page a pane holds is saved, and a wall
+saved before this opens with the address it had as its first page. The menu
+also carries
+Import cookies, which signs every native pane in at once from a browser
+export. A page on the wall may also ask for the camera and the microphone,
+which it previously could not; in the desktop app that only works from a built
+app, not from `tauri:dev`. All of it is built and unit-tested; none of it has
+been seen on screen. The desktop shell is real: it runs the server as a
+sidecar, puts a native webview in each pane, and now leaves a pane on the page
+it is showing when the wall page itself reloads instead of sending it back to
+its stored address.
 
 | Milestone | State |
 | --- | --- |
@@ -23,10 +36,10 @@ it runs the server as a sidecar and puts a native webview in each pane.
 | M2 — pure tree engine: split, delete, resize, dock, invariants | done |
 | M3 — tree rendering with a stable flat pane layer | done |
 | M4 — splitter and drag resize | done for iframe panes, see below |
-| M5 — per-pane controls: one floating ⋮, one dropdown | built and unit-tested; not yet seen on screen, see below. Minimise and the dock strip were dropped from the UI |
+| M5 — per-pane controls: one floating ⋮, one dropdown | built and unit-tested; not yet seen on screen, see below. ⋮ is also the handle that drags a pane elsewhere on the wall, same status, and the switch between the pages one pane holds sits beside it in the same shape. Minimise and the dock strip were dropped from the UI |
 | M6 — freeze and suspend policy | not started; hiding a webview already suspends it for free, see below |
 | M7 — persistence and saved views | layout restores on reload and saves on change; saved views not started |
-| M8 — native webview renderer (Tauri) | panes render, respond and navigate, and now sit where they belong; the switch that picks the renderer is built but not yet seen on screen, see below |
+| M8 — native webview renderer (Tauri) | panes render, respond and navigate, and now sit where they belong; a pane is also meant to stay on the page it is showing when the wall page reloads, which has not been watched yet, and the switch that picks the renderer is built but not yet seen on screen, see below |
 
 **What a browser confirmed.** Geometry no longer rests on injected rects alone.
 Against Chromium, with three panes on screen: slots measure non-zero, every pane
@@ -140,7 +153,7 @@ src/
   embed/     embeddability classification (pure)
   geometry/  rect maths, host registry, slot-to-pane sync
   layout/    pane tree: types, pure ops, invariants, serializer, renderer
-  pane/      pane UI (⋮ button and menu), URL handling, load state machine, store, pane layer
+  pane/      pane UI (⋮ button, menu and drag-to-rearrange), URL handling, load state machine, store, pane layer
   resize/    splitter, drag arithmetic, pane pointer suppression seam
   server/    entrypoint, routes, header probe
   session/   cookie import: export parser (pure), its own store, menu item
@@ -291,7 +304,7 @@ position. No fourth `invoke` and no native menu were added — the cheap path
 first, revisited only if the blanking proves annoying.
 
 **Not known.** Everything visual. The suite runs under happy-dom, which measures
-every element at zero width and height, so none of its 272 passing tests
+every element at zero width and height, so none of its 329 passing tests
 says that an iframe pane's body really runs edge to edge, that the ⋮ is legible
 over an actual bright website or lost over a dark one, that 14% opacity is
 "nearly invisible" rather than "invisible", that the 224px dropdown fits inside
@@ -373,7 +386,63 @@ a deliberately broken file produces the worded error instead of silence. Then
 put the same site in an iframe pane and confirm it still asks for a login —
 that is the expected result, not a regression.
 
-### 4. A long hide, and `<video>` and WebSocket under one, are not measured
+### 4. Dragging a pane has never been on screen
+
+**Known.** The gesture shares the ⋮ with the menu, because there is no other
+surface to share it with: a press on a pane's page is heard by the site and
+never by this app, under either renderer. Four pixels of travel separates the
+two gestures. Dropping against an edge of another pane puts the dragged pane on
+that side of it; dropping in the middle — the central 40% of each axis, the
+smaller share on purpose, since a swap moves two panes and is the expensive
+mistake — trades their places. The tree operations behind both are pure and
+never mint a pane id, which is what keeps the pages from reloading, and the
+wall commits the whole move in one write so no pane is ever briefly slotless.
+Every way out is covered: Escape, a cancelled pointer, the window losing focus,
+and the dragged pane being deleted while its own button is still held.
+
+**Not known.** What it is like to use. While the drag runs it holds the same
+suppressor the splitter and the menu hold, so every native webview on the wall
+is blank for the duration — which is exactly what makes drawing the drop
+feedback possible, and also what might make the gesture unpleasant. Each pane
+therefore gets a thin ring and its host name, and nothing has confirmed that
+the ring is visible over a bright dashboard and over a dark one alike, that the
+name fits a narrow pane rather than being clipped to an ellipsis that says
+nothing, or that the shaded landing area reads as "the pane will go here". Nor
+whether four pixels is the right threshold on a trackpad, where a press is far
+less steady than on a mouse — too low and every click on ⋮ risks becoming a
+tiny drag, which would make the menu feel broken.
+
+**Next step.** `bun run tauri:dev` on at least four panes, two of them native
+webviews and two of them bright pages. Drag one pane onto each of the four
+edges of another and confirm it lands on the side the shading promised; drag
+one onto a middle and confirm the two swap without either page reloading.
+Click ⋮ twenty times without meaning to drag and confirm the menu opens every
+time. Then judge the blanking the way entry 1 asks it to be judged, and count
+how many of the blank panes you can still name from the ring and label alone.
+
+### 5. The wall no longer bounces, but nothing has watched it stop
+
+**Known.** A wheel an iframe pane cannot absorb chains out to the wall
+document, and macOS answers it there with an elastic bounce of the whole grid.
+The wall document is a fixed set of viewports and was never taller than the
+window — measured, not assumed — so the fix refuses the chaining
+(`overscroll-behavior: none`) and removes any scroll it could find
+(`overflow: hidden`) rather than removing an overflow that was never there.
+Both properties matter: panes are placed in viewport coordinates and nothing
+listens for scroll, so a document that moved at all would drag every pane off
+its slot. Native webview panes never chained here in the first place.
+
+**Not known.** Whether it is gone. This is a removal of the cause by
+construction, not an observation of an effect disappearing: headless Chrome
+does not rubber-band, so no test could have watched the bounce and no test can
+watch it stop.
+
+**Next step.** `bun run dev` in Safari or Chrome on macOS with one pane showing
+a page shorter than the pane, and spin the wheel hard over it. The wall must
+not move. Then a page taller than the pane, to confirm that the pane itself
+still scrolls and only the wall is locked.
+
+### 6. A long hide, and `<video>` and WebSocket under one, are not measured
 
 **Known.** What the source says, above: hidden means not visible, which suspends
 `requestAnimationFrame` and aligns timers to about 1 Hz.
@@ -385,7 +454,7 @@ playback and WebSocket traffic are treated specially.
 that each write a timestamp, hidden for five minutes and then shown. The gaps in
 the two logs answer it.
 
-### 5. `createdAt` is monotonic only against the values it issued itself
+### 7. `createdAt` is monotonic only against the values it issued itself
 
 **Known.** `nextCreatedAt()` carries its own `lastCreatedAt` and never reads the
 tree. `restoreLayout` puts a stored tree straight into the store, so a layout
@@ -401,7 +470,7 @@ observed.
 tree, about two lines in `src/pane/pane.store.ts`. Left undone on purpose: the
 case is unproven.
 
-### 6. Loose ends found while verifying, still open
+### 8. Loose ends found while verifying, still open
 
 The three code-level ones from this list are now closed: `sidecar_env()` passes
 `NOC_DB_FILE` through, the dead `{kind:"error"}` variant is gone from
@@ -411,5 +480,109 @@ left is the two that were only ever observations.
 - Seen once: the layout's `sizes` moved on their own from `[0.5, 0.5]` to
   `[0.5976, 0.4024]` when another application took the window focus. No cause
   established.
-- After a URL is typed, `currentUrls` reads `null` for both panes while
-  `node.url` is set. Observed, not yet judged.
+- ~~After a URL is typed, `currentUrls` reads `null` for both panes while
+  `node.url` is set.~~ Closed, by deletion. The observation was right and the
+  field was never able to hold anything else: load state only ever carries a
+  url we set ourselves, because a cross-origin frame never reports where it
+  navigated. `currentUrls` is gone from `WallSnapshot`, and `panes.current_url`
+  is a legacy column alongside `home_url` — still in the schema, because
+  dropping a SQLite column means rebuilding the table, but no longer written
+  or read.
+
+### 9. Several pages in one pane: switching is tested, the control is not
+
+**Known.** A pane holds a list of sites and mounts every one of them at once,
+stacked in the body's single grid cell with all but the active one hidden —
+`visibility: hidden` for an iframe, the existing `visible` flag for a native
+webview. Nothing is ever unmounted or closed to switch, and that part is
+checked rather than asserted: the iframe tests compare element identity across
+a switch, and the native test proves `pane_webview_close` is never sent while
+one page is being swapped for another. Load state moved with it: it is the
+page's state now, keyed by site.
+
+The control takes the same shape as ⋮, because the end user asked for exactly
+that after seeing a third shape: pips (or a `3/8` counter past four pages) in
+the same chrome container, floating over an iframe pane and seated in the seam
+of a webview pane. The ⋮ panel lists the pages by name and is the only place
+that can add one, reusing the panel's single field in "add" mode.
+
+**Not known.** Everything about how it looks. The pip row is arithmetic — 8px
+pips, 4px gaps, so `12n − 4` px against a pane that can be ~96px wide, and ⋮
+has to fit beside it — computed against a stylesheet no test loads, in a DOM
+that measures every element as zero. Unverified: that pips and ⋮ both fit on
+the narrowest pane a wall will make, that a pip at 0.28 opacity reads as
+"another page is here" without reading as grime, that the active pip is
+distinguishable at a glance from a monitor's distance, that `12n − 4` is
+honest about the gap CSS actually renders, and whether four is the right place
+to give up on pips. Also unmeasured: what N live pages per pane costs, since a
+wall of four panes holding three sites each is twelve documents, and a hidden
+webview is cheap but a hidden iframe is only throttled.
+
+**One step.** Open the wall, give one pane three sites, and look at the pane
+at its narrowest. Then watch the memory of a wall holding a dozen pages.
+
+Four is also only a guess. It is where dots are expected to stop being
+something a pointer can hit, chosen on arithmetic alone; nobody has yet tried
+to click the fourth dot on a narrow pane, or seen whether the jump from four
+dots to a `3/8` chip reads as the same control or as a different one.
+
+### 10. The camera and the microphone: two layers opened, no device has arrived
+
+**Known.** Why a page was reporting "device not found" in a loop: that is not
+a refusal, it is an empty device list, which is what a context that was never
+allowed to ask gets handed. Two renderers, two separate causes. A framed pane
+is cross-origin and inherits nothing from the wall page, and the frame carried
+no permission at all; it now carries camera and microphone, delegated to the
+pane's own origin rather than to anything it might nest. A native pane was
+blocked a layer below the app: WebKit already grants capture when nothing
+intervenes, but macOS hands no devices to an app that has not declared why it
+wants them, so the app now declares it and carries the entitlements signing
+needs.
+
+**Not known.** Whether a device actually arrives, under either renderer.
+Neither layer can be tested here: the test DOM has no camera, and the
+declarations only exist inside a built app. The one thing asserted is that the
+permission is on the frame and survives a navigation. Also unseen: whether
+macOS raises its permission prompt at all, and what that prompt looks like
+over a pane that paints at the OS level.
+
+**The trap worth stating plainly.** `bun run tauri:dev` builds no app bundle,
+so capture will keep failing there and that failure is not evidence of
+anything. The only way to judge this is `bun run tauri:build` and then running
+the app it produces.
+
+**Also a decision, not an oversight.** Any page on the wall may ask, with no
+per-pane switch — making it per-pane means a new field on a pane, which is a
+stored-format change rather than a toggle. In a browser you still get asked;
+inside the desktop app the request is granted without asking you.
+
+**One step.** `bun run tauri:build`, open the app, put a page that calls
+`getUserMedia` in a pane of each kind, and watch what the prompt does.
+
+### 11. A pane keeping its page across a wall reload has never been watched
+
+**Known.** What was wrong and why nothing in the page could fix it. Reloading
+the wall sent every native pane back to its stored address, so a pane that had
+just been signed into came back on a login form — which reads as a broken
+login, because nothing on screen says the wall was what reloaded. The record
+of where each pane had already been sent lived in the wall page, and the wall
+page took it with it, leaving the shell nothing to compare against. That
+record now belongs to the shell, which outlives any number of page reloads,
+and the frontend states whether it wants a navigation or only a new rectangle.
+
+**Not known.** Whether it holds. Nothing in the test suite can see this: the
+behaviour is the shell's, and the shell is not under test.
+
+**The cost of the rule, and who pays it.** Not navigating a pane that is
+already where it was asked to be means a reload has to say out loud that it
+means to replace the page, because a reload is exactly a repeat of the address
+a pane is already on. Reload does say it, and so does the reload of every pane
+that follows a cookie import, which that import depends on entirely. The thing
+to know before adding to this: anything new that asks the shell to show a page
+and means "fetch it again" has to say so too, or it becomes a no-op with
+nothing to show that it did nothing. Moving a pane must not say it. That the
+frontend says it where it should is tested; what the shell does with it is not.
+
+**One step.** `bun run tauri:dev`, sign into a site in a native pane, then
+Cmd-R the wall page: the pane must stay on the page it was showing. Then press
+Reload in that pane's menu and confirm the page really is fetched again.

@@ -14,11 +14,23 @@
   box-sizing: border-box;
 }
 
+/* The wall is a fixed grid of viewports, never a document — nothing outside a
+   pane may scroll or bounce. A wheel an iframe pane cannot absorb (its page
+   fits the pane, or it already reached the end) chains out to this document,
+   and macOS answers it on the wall itself: `overscroll-behavior: none` removes
+   that elastic bounce, `overflow: hidden` removes any real scroll it could
+   find. Both matter because panes are placed in viewport coordinates by
+   `geometry.sync`, which has no scroll listener — a document that moves drags
+   every pane off its slot, which reads as "the whole page scrolls, the pane
+   does not". A native webview pane is a separate top-level document and never
+   chains here, so this governs the iframe renderer only. */
 html,
 body,
 #root {
   height: 100%;
   margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -174,11 +186,19 @@ body.noc-resizing .noc-pane__frame {
   top: 0;
   right: 0;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: 8px;
   pointer-events: none;
 }
 
+/* Only the parts that are really there take the pointer. The site switcher's
+   own box is as wide as its pips, but it is still a box over somebody's
+   dashboard, so the buttons are named and the box is not. */
 .noc-pane__chrome--floating .noc-pane__menu-button,
+.noc-pane__chrome--floating .noc-pane__site-pip,
+.noc-pane__chrome--floating .noc-pane__site-chip,
 .noc-pane__chrome--floating .noc-pane__menu {
   pointer-events: auto;
 }
@@ -194,6 +214,7 @@ body.noc-resizing .noc-pane__frame {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 4px;
   height: var(--noc-seam-height);
   background: var(--noc-chrome);
   border-bottom: 1px solid var(--noc-border);
@@ -220,6 +241,9 @@ body.noc-resizing .noc-pane__frame {
   cursor: pointer;
   opacity: 0.14;
   transition: opacity 120ms ease;
+  /* It is the drag handle too; without this a touch press on it scrolls the
+     page instead of carrying the pane. */
+  touch-action: none;
 }
 
 .noc-pane:hover .noc-pane__menu-button,
@@ -240,6 +264,88 @@ body.noc-resizing .noc-pane__frame {
   border-radius: 4px;
   box-shadow: none;
   font-size: 14px;
+  opacity: 1;
+}
+
+/* Which of the pane's pages is on screen, and the way to change it without
+   opening anything. It sits in the same chrome box as ⋮ and therefore takes
+   the same two shapes, which is the point: one more floating thing over a
+   native webview would not be visible at all.
+
+   Widths are a budget, not a measurement — no test loads this file. The
+   narrowest pane the wall will make is `MIN_FRACTION` 0.05, about 96px on a
+   1920 wall, and the chrome also has to hold a 24px button: 8px pips with 4px
+   gaps come to 12n - 4, which is why `pane.site-switcher` stops at four of them
+   and shows a counting chip beyond that. */
+.noc-pane__sites {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Status, not a command, so it does not start at ⋮'s 0.14: a marker nobody can
+   see until they hover is a marker nobody reads. The dark disc and light rim
+   are ⋮'s, for the same reason — what is behind it is somebody's website.
+   Active is the bright dot, inactive the dark one, so the two differ in
+   brightness and not only in alpha. */
+.noc-pane__site-pip {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  background: rgba(13, 15, 20, 0.82);
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+  cursor: pointer;
+  opacity: 0.28;
+  transition: opacity 120ms ease;
+}
+
+.noc-pane__site-pip[data-active="true"] {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.24),
+    inset 0 0 0 3px #f4f6fa;
+  opacity: 0.55;
+}
+
+.noc-pane:hover .noc-pane__site-pip,
+.noc-pane__site-pip:hover,
+.noc-pane__site-pip:focus-visible {
+  opacity: 1;
+}
+
+/* Past four pages the pips stop being targets a pointer can hit on a narrow
+   pane. This costs the same ~28px however many there are, advances on click,
+   and the ⋮ panel is where a particular page is chosen by name. Tabular
+   figures so the box does not twitch as the number changes. */
+.noc-pane__site-chip {
+  height: 16px;
+  padding: 0 4px;
+  color: #f4f6fa;
+  background: rgba(13, 15, 20, 0.82);
+  border: 0;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+  font: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+
+.noc-pane:hover .noc-pane__site-chip,
+.noc-pane__site-chip:hover,
+.noc-pane__site-chip:focus-visible {
+  opacity: 1;
+}
+
+/* In the seam these are already on the app's own surface, so the resting dim —
+   which exists to keep the wall from defacing a website — has nothing left to
+   protect. Same reasoning, and the same line, as the seam's ⋮. */
+.noc-pane__chrome--seam .noc-pane__site-pip,
+.noc-pane__chrome--seam .noc-pane__site-chip {
   opacity: 1;
 }
 
@@ -286,6 +392,58 @@ body.noc-resizing .noc-pane__frame {
 .noc-pane__menu-item:hover,
 .noc-pane__menu-item:focus-visible {
   background: rgba(255, 255, 255, 0.07);
+}
+
+/* The row that is current, and the mode the input is in: the one highlight a
+   menu has, reused rather than invented twice. */
+.noc-pane__menu-item[data-active="true"] {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* One of the pane's pages: its name, and the one way to drop it. Two controls
+   in a row because they are two different acts on the same thing, and a 224px
+   panel has no room for a submenu. The name takes what is left and ellipsises;
+   a host that does not fit is still recognisable from its start. */
+.noc-pane__menu-site {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.noc-pane__menu-site-pick {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--noc-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.noc-pane__menu-site-pick[data-active="true"] {
+  color: var(--noc-text);
+}
+
+/* Muted until it is reached, and the danger colour only then: a × that is red
+   all the time reads as a warning about the row it sits on. */
+.noc-pane__menu-site-remove {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--noc-muted);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.noc-pane__menu-site-remove:hover,
+.noc-pane__menu-site-remove:focus-visible {
+  color: var(--noc-danger);
+  background: rgba(255, 123, 114, 0.14);
 }
 
 /* A row the host cannot offer: dimmed to the muted colour and inert, kept in
@@ -419,6 +577,83 @@ body.noc-resizing .noc-pane__menu {
    takes mouse input at the OS level, outside the reach of any CSS. */
 body.noc-no-pane-cursor .noc-pane-host {
   pointer-events: none;
+}
+
+/* Drag feedback, and the one overlay that is always safe: it exists only while
+   a drag holds the pointer suppressor, so every native webview is hidden and
+   there is nothing left that paints above the web layer. `pointer-events: none`
+   is load-bearing — the drop target is found with `elementFromPoint`, and an
+   overlay that answered would make every drop land on the pane it started from.
+   z-index 4 clears the floating ⋮ (2) and its panel (3). */
+.noc-pane-drop {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+/* Every pane is outlined for the duration, not just the two taking part. A
+   webview pane is blank while the drag runs and an iframe pane is not, so on a
+   mixed wall the outline and the label are what say the empty boxes are still
+   panes rather than something that just broke. */
+.noc-pane-drop--idle {
+  box-shadow: inset 0 0 0 1px rgba(215, 220, 229, 0.18);
+}
+
+.noc-pane-drop--source {
+  background: rgba(15, 17, 21, 0.55);
+  box-shadow: inset 0 0 0 2px var(--noc-muted);
+}
+
+.noc-pane-drop--target {
+  box-shadow: inset 0 0 0 2px #6ea8fe;
+}
+
+/* The landing area, drawn where the pane will actually end up: half the target
+   along one axis for an edge, the whole of it inset for a swap. Guessing wrong
+   about where a pane lands is the only real mistake this gesture can make. */
+.noc-pane-drop__zone {
+  position: absolute;
+  background: rgba(110, 168, 254, 0.28);
+  box-shadow: inset 0 0 0 1px #6ea8fe;
+}
+
+.noc-pane-drop__zone--left {
+  inset: 0 50% 0 0;
+}
+
+.noc-pane-drop__zone--right {
+  inset: 0 0 0 50%;
+}
+
+.noc-pane-drop__zone--top {
+  inset: 0 0 50% 0;
+}
+
+.noc-pane-drop__zone--bottom {
+  inset: 50% 0 0 0;
+}
+
+.noc-pane-drop__zone--center {
+  inset: 12px;
+  border-radius: 8px;
+}
+
+/* Names the pane while its content may be a blank box. Its own backdrop for
+   the same reason the ⋮ has one: what is behind it is somebody else's site. */
+.noc-pane-drop__label {
+  position: relative;
+  max-width: 90%;
+  padding: 4px 8px;
+  overflow: hidden;
+  color: #f4f6fa;
+  background: rgba(13, 15, 20, 0.82);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .noc-pane__status {

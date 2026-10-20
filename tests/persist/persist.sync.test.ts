@@ -55,7 +55,6 @@ function storedSnapshot(): unknown {
   return {
     layout: serializeLayout(createTree(() => STORED_ROOT, 5)),
     settings: DEFAULT_WALL_SETTINGS,
-    currentUrls: {},
   };
 }
 

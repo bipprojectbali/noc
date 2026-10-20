@@ -12,7 +12,19 @@ import {
   dockPane,
   undockPane,
 } from "../../src/layout/layout.remove.ts";
-import { isSplit, type LayoutTree } from "../../src/layout/layout.types.ts";
+import { movePane, swapPanes } from "../../src/layout/layout.move.ts";
+import {
+  addSite,
+  removeSite,
+  setActiveSite,
+  setSiteUrl,
+} from "../../src/layout/layout.sites.ts";
+import {
+  isPane,
+  isSplit,
+  type LayoutTree,
+  type PaneSide,
+} from "../../src/layout/layout.types.ts";
 
 const SEED_COUNT = 200;
 const OPS_PER_SEED = 40;
@@ -40,6 +52,28 @@ function splitIds(tree: LayoutTree): string[] {
     .map((node) => node.id);
 }
 
+/** Every pane node that exists, in the tree or in the dock. */
+function allPaneIds(tree: LayoutTree): string[] {
+  return Object.values(tree.nodes)
+    .filter((node) => isPane(node))
+    .map((node) => node.id)
+    .sort();
+}
+
+/** The addresses one pane holds, empty for a pane that has none yet. */
+function siteIds(tree: LayoutTree, paneId: string): string[] {
+  const node = tree.nodes[paneId];
+  if (node === undefined || !isPane(node)) return [];
+  return node.sites.map((site) => site.id);
+}
+
+/** Every pane's site list, in order, as one comparable value. */
+function siteFingerprint(tree: LayoutTree): string[] {
+  return allPaneIds(tree).map((id) => `${id}=${siteIds(tree, id).join(",")}`);
+}
+
+const SIDES: readonly PaneSide[] = ["left", "right", "top", "bottom"];
+
 type Step = { op: string; args: string[] };
 
 /** Applies one random operation. Returns the same tree when the op does not apply. */
@@ -51,9 +85,25 @@ function applyRandomOp(
 ): { tree: LayoutTree; step: Step } {
   const treePanes = listTreePaneIds(tree);
   const docked = tree.dock.map((entry) => entry.paneId);
-  const ops = ["split", "delete", "dock", "undock", "resize"] as const;
+  const ops = [
+    "split",
+    "delete",
+    "dock",
+    "undock",
+    "resize",
+    "move",
+    "swap",
+    // Site ops come out of the same id counter as nodes, which is the point:
+    // site ids are unique wall-wide, so one sequence producing both is exactly
+    // the guarantee `findViolations` checks.
+    "add-site",
+    "remove-site",
+    "activate-site",
+    "retarget-site",
+  ] as const;
   const op = ops[Math.floor(random() * ops.length)] ?? "split";
   const direction = random() < 0.5 ? "row" : "column";
+  const side = SIDES[Math.floor(random() * SIDES.length)] ?? "left";
 
   switch (op) {
     case "split": {
@@ -89,6 +139,67 @@ function applyRandomOp(
         step: { op, args: [target, host, direction] },
       };
     }
+    // Move and swap draw from docked panes too, so the refusal paths are
+    // exercised as hard as the structural ones.
+    case "move": {
+      const source = pick(random, [...treePanes, ...docked]);
+      const target = pick(random, [...treePanes, ...docked]);
+      if (source === undefined || target === undefined) break;
+      const result = movePane(tree, source, target, side, makeId);
+      return {
+        tree: result.ok ? result.tree : tree,
+        step: { op: result.ok ? op : `${op}:refused`, args: [source, target, side] },
+      };
+    }
+    case "swap": {
+      const source = pick(random, [...treePanes, ...docked]);
+      const target = pick(random, [...treePanes, ...docked]);
+      if (source === undefined || target === undefined) break;
+      const result = swapPanes(tree, source, target);
+      return {
+        tree: result.ok ? result.tree : tree,
+        step: { op: result.ok ? op : `${op}:refused`, args: [source, target] },
+      };
+    }
+    // Site ops draw from docked panes too: a docked pane is alive, and its
+    // sites must stay as well formed as any other pane's.
+    case "add-site": {
+      const target = pick(random, allPaneIds(tree));
+      if (target === undefined) break;
+      const url = `https://site-${Math.floor(random() * 1000)}.example/`;
+      return {
+        tree: addSite(tree, target, url, makeId, now),
+        step: { op, args: [target, url] },
+      };
+    }
+    case "remove-site": {
+      const target = pick(random, allPaneIds(tree));
+      const site = target === undefined ? undefined : pick(random, siteIds(tree, target));
+      if (target === undefined || site === undefined) break;
+      return {
+        tree: removeSite(tree, target, site),
+        step: { op, args: [target, site] },
+      };
+    }
+    case "activate-site": {
+      const target = pick(random, allPaneIds(tree));
+      const site = target === undefined ? undefined : pick(random, siteIds(tree, target));
+      if (target === undefined || site === undefined) break;
+      return {
+        tree: setActiveSite(tree, target, site),
+        step: { op, args: [target, site] },
+      };
+    }
+    case "retarget-site": {
+      const target = pick(random, allPaneIds(tree));
+      const site = target === undefined ? undefined : pick(random, siteIds(tree, target));
+      if (target === undefined || site === undefined) break;
+      const url = `https://moved-${Math.floor(random() * 1000)}.example/`;
+      return {
+        tree: setSiteUrl(tree, target, site, url),
+        step: { op, args: [target, site, url] },
+      };
+    }
     case "resize": {
       const target = pick(random, splitIds(tree));
       if (target === undefined) break;
@@ -112,9 +223,20 @@ describe("tree invariants hold under arbitrary operation sequences", () => {
       const history: Step[] = [];
 
       for (let i = 0; i < OPS_PER_SEED; i++) {
+        const panesBefore = allPaneIds(tree);
+        const sitesBefore = siteFingerprint(tree);
         const result = applyRandomOp(tree, random, makeId, i + 1);
         tree = result.tree;
         history.push(result.step);
+
+        // Rearranging must never mint or drop a pane id: a new id is a new
+        // pane to the pane layer, which means a remount and a page reload. The
+        // same goes for a pane's sites, in order: a site that changes place in
+        // the list is a frame that moves in the DOM, which reloads its page.
+        if (result.step.op === "move" || result.step.op === "swap") {
+          expect(allPaneIds(tree)).toEqual(panesBefore);
+          expect(siteFingerprint(tree)).toEqual(sitesBefore);
+        }
 
         const violations = findViolations(tree);
         if (violations.length > 0) {
@@ -126,6 +248,59 @@ describe("tree invariants hold under arbitrary operation sequences", () => {
           );
         }
         expect(listTreePaneIds(tree).length).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+});
+
+describe("rearranging alone never changes which panes exist", () => {
+  test(`${SEED_COUNT} seeds of move/swap only keep the pane set and the tree intact`, () => {
+    for (let seed = 1; seed <= SEED_COUNT; seed++) {
+      const random = mulberry32(seed);
+      let counter = 0;
+      const makeId = () => `n${++counter}`;
+
+      // Grow a wall first; move and swap can only shuffle what is already there.
+      let tree = createTree(makeId, 0);
+      for (let i = 0; i < 6; i++) {
+        const target = pick(random, listTreePaneIds(tree));
+        if (target === undefined) continue;
+        tree = splitPane(tree, target, random() < 0.5 ? "row" : "column", makeId, i + 1);
+      }
+
+      const panes = allPaneIds(tree);
+      const history: Step[] = [];
+
+      for (let i = 0; i < OPS_PER_SEED; i++) {
+        const swapOnly = random() < 0.5;
+        const panesNow = listTreePaneIds(tree);
+        const a = pick(random, panesNow);
+        const b = pick(random, panesNow);
+        if (a === undefined || b === undefined) continue;
+        const side = SIDES[Math.floor(random() * SIDES.length)] ?? "left";
+
+        const result = swapOnly
+          ? swapPanes(tree, a, b)
+          : movePane(tree, a, b, side, makeId);
+        history.push({
+          op: swapOnly ? "swap" : "move",
+          args: swapOnly ? [a, b] : [a, b, side],
+        });
+        if (!result.ok) {
+          throw new Error(`seed ${seed} step ${i}: refused with "${result.reason}"`);
+        }
+        tree = result.tree;
+
+        const violations = findViolations(tree);
+        if (violations.length > 0) {
+          const trail = history
+            .map((step) => `${step.op}(${step.args.join(", ")})`)
+            .join(" -> ");
+          throw new Error(
+            `seed ${seed} step ${i}: ${violations.join("; ")}\nhistory: ${trail}`,
+          );
+        }
+        expect(allPaneIds(tree)).toEqual(panes);
       }
     }
   });

@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 
 import { PaneFrame } from "../../src/pane/pane.frame.tsx";
+import { PANE_ALLOW_POLICY } from "../../src/pane/pane.iframe-renderer.tsx";
 import { useWallStore } from "../../src/pane/pane.store.ts";
 import type { EmbedVerdict } from "../../src/embed/embed.classifier.ts";
 import { resetWallStore, settleAsyncWork } from "../fixtures/wall-store.ts";
@@ -168,6 +169,43 @@ describe("PaneFrame validates input before touching the iframe", () => {
     const alert = await waitFor(() => screen.getByRole("alert"), WAIT);
     expect(alert.textContent).toContain("Enter a URL");
     expect(probeCalls).toHaveLength(0);
+  });
+});
+
+describe("PaneFrame delegates capture permission to the pane", () => {
+  /**
+   * A cross-origin iframe inherits no capture permission, so without `allow`
+   * the site inside sees zero media devices and reports "device not found".
+   * Nothing in happy-dom has a camera: this checks the delegation is declared,
+   * never that macOS hands one over.
+   */
+  test("the iframe carries the camera and microphone policy from the start", () => {
+    render(<PaneFrame paneId={PANE_ID} />);
+    expect(
+      screen.getByTestId(`pane-frame-${PANE_ID}`).getAttribute("allow"),
+    ).toBe(PANE_ALLOW_POLICY);
+  });
+
+  test("the policy names features bare, so it stops at the pane's own origin", () => {
+    // `camera` is `camera 'src'`; `camera *` would let the page pass the
+    // camera on to anything it nests. Keep the narrow form.
+    expect(PANE_ALLOW_POLICY).toContain("camera");
+    expect(PANE_ALLOW_POLICY).toContain("microphone");
+    expect(PANE_ALLOW_POLICY).not.toContain("*");
+  });
+
+  test("navigating the pane does not drop the policy", async () => {
+    render(<PaneFrame paneId={PANE_ID} />);
+    await submit("https://example.com");
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId(`pane-frame-${PANE_ID}`).getAttribute("src"),
+      ).toBe("https://example.com/");
+    }, WAIT);
+    expect(
+      screen.getByTestId(`pane-frame-${PANE_ID}`).getAttribute("allow"),
+    ).toBe(PANE_ALLOW_POLICY);
   });
 });
 

@@ -11,7 +11,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { isPane, type PaneId } from "../../src/layout/layout.types.ts";
-import { paneLoadState, useWallStore } from "../../src/pane/pane.store.ts";
+import { paneLoadState } from "../../src/pane/pane.store-sites.ts";
+import { useWallStore } from "../../src/pane/pane.store.ts";
 import { reloadEveryPane } from "../../src/session/session.store.ts";
 import { resetWallStore, settleAsyncWork } from "../fixtures/wall-store.ts";
 

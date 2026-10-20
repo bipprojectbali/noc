@@ -20,7 +20,7 @@ import type { NativePaneBridge, NativeRect } from "../../src/native/native.bridg
 import { PaneFrame } from "../../src/pane/pane.frame.tsx";
 import { useWallStore } from "../../src/pane/pane.store.ts";
 import { createPaneWebviewRenderer } from "../../src/pane/pane.webview-renderer.ts";
-import { resetWallStore, settleAsyncWork } from "../fixtures/wall-store.ts";
+import { resetWallStore, settleAsyncWork, siteIdsOf } from "../fixtures/wall-store.ts";
 
 const WAIT = { timeout: 2000 };
 const RECT: NativeRect = { x: 10, y: 20, width: 300, height: 200 };
@@ -60,7 +60,9 @@ describe("reopen navigates a webview that is already there", () => {
   test("a reload asks the shell for the same url a second time", async () => {
     const { bridge, calls } = recordingBridge();
     const renderer = createPaneWebviewRenderer({ bridge, readRect: () => RECT });
-    renderer.registerAnchor("p1", document.createElement("div"));
+    // Site id and pane id are the same string here: this renderer is driven
+    // directly, and the webview's label is the site.
+    renderer.registerAnchor("p1", "p1", document.createElement("div"));
     renderer.setUrl("p1", URL_ONE);
     renderer.place("p1", true);
     await settle();
@@ -83,7 +85,7 @@ describe("reopen navigates a webview that is already there", () => {
   test("reopening a pane the layout has hidden leaves it hidden", async () => {
     const { bridge, calls } = recordingBridge();
     const renderer = createPaneWebviewRenderer({ bridge, readRect: () => RECT });
-    renderer.registerAnchor("p2", document.createElement("div"));
+    renderer.registerAnchor("p2", "p2", document.createElement("div"));
     renderer.setUrl("p2", URL_ONE);
     renderer.place("p2", false);
     await settle();
@@ -103,7 +105,7 @@ describe("reopen navigates a webview that is already there", () => {
   test("a pane with no url, and a pane the renderer never saw, reach nothing", async () => {
     const { bridge, calls } = recordingBridge();
     const renderer = createPaneWebviewRenderer({ bridge, readRect: () => RECT });
-    renderer.registerAnchor("p3", document.createElement("div"));
+    renderer.registerAnchor("p3", "p3", document.createElement("div"));
     renderer.setUrl("p3", URL_ONE);
     await settle();
     renderer.setUrl("p3", null);
@@ -118,7 +120,7 @@ describe("reopen navigates a webview that is already there", () => {
   });
 });
 
-type InvokeCall = { cmd: string; paneId: unknown };
+type InvokeCall = { cmd: string; paneId: unknown; navigate: unknown };
 
 let invokeCalls: InvokeCall[] = [];
 let probeCalls: string[] = [];
@@ -126,8 +128,8 @@ const realFetch = globalThis.fetch;
 
 function enterNativeHost(): void {
   (globalThis.window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
-    invoke: (cmd: string, args: { paneId?: unknown }) => {
-      invokeCalls.push({ cmd, paneId: args?.paneId });
+    invoke: (cmd: string, args: { paneId?: unknown; navigate?: unknown }) => {
+      invokeCalls.push({ cmd, paneId: args?.paneId, navigate: args?.navigate });
       return Promise.resolve();
     },
   };
@@ -138,12 +140,30 @@ function leaveNativeHost(): void {
     .__TAURI_INTERNALS__;
 }
 
+/**
+ * The native commands aimed at any of a pane's sites: the shell is addressed by
+ * site, since a webview is one site's page rather than one pane's.
+ */
 function commandsFor(paneId: string): string[] {
-  return invokeCalls.flatMap((call) => (call.paneId === paneId ? [call.cmd] : []));
+  const sites = siteIdsOf(paneId);
+  return invokeCalls.flatMap((call) =>
+    sites.some((siteId) => call.paneId === siteId) ? [call.cmd] : [],
+  );
 }
 
 function countOf(paneId: string, cmd: string): number {
   return commandsFor(paneId).filter((seen) => seen === cmd).length;
+}
+
+/** The `navigate` flag of every `pane_webview_show` aimed at this pane's sites. */
+function navigateFlagsFor(paneId: string): unknown[] {
+  const sites = siteIdsOf(paneId);
+  return invokeCalls.flatMap((call) =>
+    call.cmd === "pane_webview_show" &&
+    sites.some((siteId) => call.paneId === siteId)
+      ? [call.navigate]
+      : [],
+  );
 }
 
 async function submit(paneId: string, raw: string): Promise<void> {
@@ -190,6 +210,37 @@ describe("reloadPane reaches whichever renderer the pane got", () => {
       expect(countOf(PANE, "pane_webview_show")).toBe(2);
     }, WAIT);
     expect(commandsFor(PANE)).not.toContain("pane_webview_close");
+  });
+
+  /**
+   * The flag is the whole reload, not a detail of it. The shell remembers the
+   * address each pane was last sent to and skips a `show` that would repeat it,
+   * because this page forgets its panes on every reload and would otherwise
+   * snap them all back to the stored url. That dedupe swallows the reload button
+   * too unless the caller says it means to replace the page — so a mount must
+   * ask for no navigation and a reload must ask for one.
+   */
+  test("a reload asks the shell to navigate, a mount does not", async () => {
+    const PANE = "r4";
+    enterNativeHost();
+    resetWallStore(PANE);
+    render(<PaneFrame paneId={PANE} />);
+    await submit(PANE, "https://example.com");
+    await waitFor(() => {
+      expect(countOf(PANE, "pane_webview_show")).toBe(1);
+    }, WAIT);
+    // Opening the page is not replacing it: the webview may already be there,
+    // left over from before this page reloaded, and further along than the url.
+    expect(navigateFlagsFor(PANE)).toEqual([false]);
+
+    await act(async () => {
+      useWallStore.getState().reloadPane(PANE);
+    });
+
+    await waitFor(() => {
+      expect(countOf(PANE, "pane_webview_show")).toBe(2);
+    }, WAIT);
+    expect(navigateFlagsFor(PANE)).toEqual([false, true]);
   });
 
   test("an empty pane has nothing to reload", async () => {

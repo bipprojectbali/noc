@@ -27,6 +27,12 @@
  * and every webview pane goes blank: deliberate, and hiding is not destroying,
  * so those pages keep running and come back at the same scroll position.
  *
+ * ⋮ carries a second gesture for the same reason it carries the first: it is
+ * the only surface this app owns on a loaded pane under either renderer. A
+ * press that moves past a few pixels drags the pane somewhere else on the wall
+ * instead of opening anything — `pane.drag` owns that, including the click it
+ * then has to swallow.
+ *
  * Right-click opens the same menu on surfaces this app owns: an empty pane's
  * message (`pane.frame` wires it) and, on a floating chrome, the button alone,
  * since the box around it is transparent to the pointer. The handler stays on
@@ -43,11 +49,23 @@ import {
   resumePanePointerCapture,
   suspendPanePointerCapture,
 } from "../resize/resize.pointer-capture.ts";
+import { usePaneDragHandle } from "./pane.drag.ts";
+import { usePaneMenuDismiss } from "./pane.menu-dismiss.ts";
 import { PaneMenuPanel } from "./pane.menu-panel.tsx";
+import {
+  PaneSiteSwitcher,
+  type PaneSitesControl,
+} from "./pane.site-switcher.tsx";
 
 export type PaneMenuProps = {
   paneId: PaneId;
   url: string | null;
+  /**
+   * The pages this pane holds. The switcher that shows them is a sibling of ⋮
+   * inside this one chrome box, so it inherits `floating` rather than deciding
+   * it again — a second shape over a native webview would not be visible at all.
+   */
+  sites: PaneSitesControl;
   error: string | null;
   strategy: PaneStrategy;
   /**
@@ -74,6 +92,7 @@ export type PaneMenuProps = {
 export function PaneMenu({
   paneId,
   url,
+  sites,
   open,
   floating,
   onOpenChange,
@@ -81,6 +100,8 @@ export function PaneMenu({
 }: PaneMenuProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  // ⋮ is also the wall's drag handle: see `pane.drag` for why it has to be.
+  const dragHandle = usePaneDragHandle(paneId, () => onOpenChange(!open));
 
   // A dropdown, not a popover: focus follows the menu in and comes back out
   // again. In goes to the address field rather than the first item, because
@@ -102,23 +123,7 @@ export function PaneMenu({
     return () => resumePanePointerCapture();
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onOpenChange(false);
-    };
-    const onPointerDown = (event: MouseEvent) => {
-      const root = rootRef.current;
-      if (root !== null && root.contains(event.target as Node)) return;
-      onOpenChange(false);
-    };
-    document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("mousedown", onPointerDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.removeEventListener("mousedown", onPointerDown);
-    };
-  }, [open, onOpenChange]);
+  usePaneMenuDismiss(open, rootRef, onOpenChange);
 
   return (
     <div
@@ -130,6 +135,10 @@ export function PaneMenu({
         onOpenChange(true);
       }}
     >
+      {/* Before ⋮ in DOM order, so tab order and the row read left to right:
+          which page is showing, then what can be done to the pane. */}
+      <PaneSiteSwitcher paneId={paneId} sites={sites} />
+
       <button
         className="noc-pane__menu-button"
         ref={buttonRef}
@@ -139,12 +148,14 @@ export function PaneMenu({
         aria-label={`Menu for pane ${paneId}`}
         title={url ?? "Pane menu"}
         data-testid={`pane-menu-button-${paneId}`}
-        onClick={() => onOpenChange(!open)}
+        {...dragHandle}
       >
         ⋮
       </button>
 
-      {open && <PaneMenuPanel paneId={paneId} url={url} {...panel} />}
+      {open && (
+        <PaneMenuPanel paneId={paneId} url={url} sites={sites} {...panel} />
+      )}
     </div>
   );
 }

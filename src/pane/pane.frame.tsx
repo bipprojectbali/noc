@@ -1,19 +1,27 @@
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 
 import { isNativeHost } from "../native/native.bridge.ts";
 import { isPane, type PaneId } from "../layout/layout.types.ts";
+import { INITIAL_PANE_LOAD_STATE, type PaneLoadState } from "./pane.load-state.ts";
 import { PaneMenu } from "./pane.menu.tsx";
 import { paneRendererFor } from "./pane.renderer.ts";
-import { paneLoadState, useWallStore } from "./pane.store.ts";
+import { useWallStore } from "./pane.store.ts";
+import { urlHostLabel } from "./pane.url.ts";
 
 export type PaneFrameProps = { paneId: PaneId };
+
+/** Stable identity, so the shallow compare below is not defeated by it. */
+const NO_SITES: readonly PaneLoadState[] = [];
 
 /**
  * One pane: its chrome and its content.
  *
- * The content is mounted for the pane's whole life and only ever hidden.
- * Unmounting it, or moving it to a different parent in the DOM, reloads the
- * site and discards everything it holds.
+ * A pane holds a list of sites and mounts every one of them at once, stacked in
+ * the body's single grid cell, with all but the active one hidden. Content is
+ * mounted for as long as the pane holds that site and is only ever hidden:
+ * unmounting it, or moving it to a different parent in the DOM, reloads the
+ * page and discards everything it holds.
  *
  * Whether the chrome may float over that content is decided here, per pane,
  * from the renderer actually serving it — not from the host, and not once for
@@ -29,9 +37,24 @@ export type PaneFrameProps = { paneId: PaneId };
 export function PaneFrame({ paneId }: PaneFrameProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const node = useWallStore((state) => state.tree.nodes[paneId]);
-  const load = useWallStore((state) => paneLoadState(state, paneId));
+  // One entry per site, in the pane's own order. The stored state objects are
+  // compared by identity, so a probe settling in another pane is not a render
+  // here — and an array of them is what keeps this to one subscription.
+  const loads = useWallStore(
+    useShallow((state): readonly PaneLoadState[] => {
+      const pane = state.tree.nodes[paneId];
+      if (pane === undefined || !isPane(pane)) return NO_SITES;
+      return pane.sites.map(
+        (site) => state.load[site.id] ?? INITIAL_PANE_LOAD_STATE,
+      );
+    }),
+  );
   const error = useWallStore((state) => state.urlError[paneId] ?? null);
   const submitUrl = useWallStore((state) => state.submitUrl);
+  const addSite = useWallStore((state) => state.addSite);
+  const activateSite = useWallStore((state) => state.activateSite);
+  const toggleSite = useWallStore((state) => state.toggleSite);
+  const removeSite = useWallStore((state) => state.removeSite);
   const reloadPane = useWallStore((state) => state.reloadPane);
   const splitPane = useWallStore((state) => state.splitPane);
   const deletePane = useWallStore((state) => state.deletePane);
@@ -41,6 +64,11 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
     return <div className="noc-error">Pane {paneId} is not in the layout.</div>;
   }
 
+  const activeIndex = node.sites.findIndex((site) => site.id === node.activeSiteId);
+  const url = node.sites[activeIndex]?.url ?? null;
+  // The chrome asks about the page on screen. The pane's other pages are
+  // loaded and hidden, and nothing above here asks about them collectively.
+  const load = loads[activeIndex] ?? INITIAL_PANE_LOAD_STATE;
   const renderer = paneRendererFor(node.strategy);
   // Framing permission is an iframe problem. A native webview is a top-level
   // document, so reporting a refusal there would be reporting a limit that does
@@ -54,7 +82,15 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
     <section className="noc-pane" data-pane-id={paneId}>
       <PaneMenu
         paneId={paneId}
-        url={node.url}
+        url={url}
+        sites={{
+          list: node.sites,
+          activeId: node.activeSiteId,
+          activate: (siteId) => activateSite(paneId, siteId),
+          next: () => toggleSite(paneId),
+          add: (raw) => addSite(paneId, raw),
+          remove: (siteId) => removeSite(paneId, siteId),
+        }}
         error={error}
         strategy={node.strategy}
         nativeHost={nativeHost}
@@ -81,7 +117,32 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
       />
 
       <div className="noc-pane__body">
-        <renderer.Content paneId={paneId} url={node.url} load={load} />
+        {/* One element per site, all of them in the body's single grid cell and
+            all mounted for as long as the pane holds the site. Only the active
+            one is shown: unmounting a page, or moving it in the DOM, reloads it
+            and costs it its scroll position and its session. A pane with no
+            sites still mounts one, keyed by the pane, so the renderer has
+            somewhere to put the empty-pane case. */}
+        {node.sites.length === 0 ? (
+          <renderer.Content
+            paneId={paneId}
+            siteId={paneId}
+            url={null}
+            load={INITIAL_PANE_LOAD_STATE}
+            active
+          />
+        ) : (
+          node.sites.map((site, index) => (
+            <renderer.Content
+              key={site.id}
+              paneId={paneId}
+              siteId={site.id}
+              url={site.url}
+              load={loads[index] ?? INITIAL_PANE_LOAD_STATE}
+              active={site.id === node.activeSiteId}
+            />
+          ))
+        )}
 
         {load.kind === "empty" && (
           <p
@@ -107,7 +168,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
             data-testid={`pane-refused-${paneId}`}
           >
             <div>
-              <strong>{new URL(load.url).host} refuses to be framed.</strong>
+              <strong>{urlHostLabel(load.url)} refuses to be framed.</strong>
               <div className="noc-pane__reason">{load.reason}</div>
               <div className="noc-pane__reason">
                 {nativeHost

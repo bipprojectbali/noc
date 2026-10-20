@@ -15,7 +15,7 @@
 import type { ReactNode } from "react";
 
 import { isNativeHost } from "../native/native.bridge.ts";
-import type { PaneId, PaneStrategy } from "../layout/layout.types.ts";
+import type { PaneId, PaneStrategy, SiteId } from "../layout/layout.types.ts";
 import type { PaneLoadState } from "./pane.load-state.ts";
 import { paneIframeRenderer } from "./pane.iframe-renderer.tsx";
 import { paneWebviewRenderer } from "./pane.webview-renderer.ts";
@@ -25,22 +25,45 @@ export type PaneRendererKind = "iframe" | "webview";
 export type PaneContentProps = {
   paneId: PaneId;
   /**
-   * The pane's address as the tree holds it. Separate from `load` because
+   * The document this element serves. One pane holds several, all mounted at
+   * once, so everything that identifies a *document* — the DOM node, its React
+   * key, a native webview's label — hangs off this rather than the pane id.
+   */
+  siteId: SiteId;
+  /**
+   * This site's address as the tree holds it. Separate from `load` because
    * framing permission is an iframe concern: the webview renderer shows this URL
    * whatever the probe said about it.
    */
   url: string | null;
   load: PaneLoadState;
+  /**
+   * Whether this is the site on screen. The others stay mounted and hidden:
+   * switching has to be instant and must not cost the page its scroll position
+   * or its session, which unmounting would.
+   */
+  active: boolean;
 };
 
 export type PaneRenderer = {
   kind: PaneRendererKind;
   /** Rendered inside the pane body, as a sibling of the chrome. */
   Content: (props: PaneContentProps) => ReactNode;
-  /** Pushes placement after a geometry sync. Not placed anywhere means hidden. */
+  /**
+   * Pushes placement after a geometry sync. Not placed anywhere means hidden.
+   * Still keyed by pane: every site of a pane shares one rect, and the geometry
+   * layer has no reason to learn that a pane holds more than one document.
+   */
   place: (paneId: PaneId, visible: boolean) => void;
-  /** The pane is gone for good; anything it held may be destroyed. */
+  /** The pane is gone for good; everything it held may be destroyed. */
   release: (paneId: PaneId) => void;
+  /**
+   * One of the pane's documents is gone for good — the pane stays. The third
+   * and last caller allowed to destroy a native webview, for the same reason
+   * the other two are: the document will never be shown again. Switching sites
+   * must never reach this; that is what `active` is for.
+   */
+  releaseSite: (siteId: SiteId) => void;
   /**
    * Whether panes may take the pointer. A drag has to be able to run over them:
    * an iframe swallows the pointer, and a native webview takes mouse input at
@@ -96,6 +119,28 @@ export function placePane(paneId: PaneId, visible: boolean): void {
 
 export function releasePane(paneId: PaneId): void {
   for (const renderer of PANE_RENDERERS) renderer.release(paneId);
+}
+
+export function releaseSite(siteId: SiteId): void {
+  for (const renderer of PANE_RENDERERS) renderer.releaseSite(siteId);
+}
+
+/**
+ * The element a renderer tags for tests.
+ *
+ * A pane now mounts one element per site, so the pane-scoped name cannot sit on
+ * all of them. It stays on the one that is actually on screen — "the frame of
+ * pane p1" is what a reader means — and the sites kept warm behind it are named
+ * with their own id. Nothing in the running app reads either; `data-pane-slot`
+ * and `data-pane-host` are the only DOM hooks that logic uses.
+ */
+export function paneContentTestId(
+  prefix: string,
+  paneId: PaneId,
+  siteId: SiteId,
+  active: boolean,
+): string {
+  return active ? `${prefix}-${paneId}` : `${prefix}-${paneId}-${siteId}`;
 }
 
 /** The whole wall at once: a drag is not per pane. */

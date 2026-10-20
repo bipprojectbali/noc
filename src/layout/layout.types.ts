@@ -7,16 +7,50 @@ export type PaneId = NodeId;
 export type SplitDirection = "row" | "column";
 
 /**
+ * Which edge of a host pane an incoming pane lands on. A drop target is an edge,
+ * not a direction plus a slot index, so the two are derived from it rather than
+ * passed around separately and risking a mismatch.
+ */
+export type PaneSide = "left" | "right" | "top" | "bottom";
+
+export function sideToDirection(side: PaneSide): SplitDirection {
+  return side === "left" || side === "right" ? "row" : "column";
+}
+
+/** True when the incoming pane takes the first child slot of the new split. */
+export function sideIsLeading(side: PaneSide): boolean {
+  return side === "left" || side === "top";
+}
+
+/**
  * Which renderer serves a pane. Resolved per pane because the wall mixes
  * internal dashboards (plain iframe) with sites that refuse framing.
  */
 export type PaneStrategy = "auto" | "iframe" | "webview";
 
+/**
+ * Identifies one address inside a pane. Unique across the whole wall, not per
+ * pane, so anything keyed by site needs no pane id beside it. Alnum, `-` and
+ * `_` only: Rust's `pane_label` rejects anything else.
+ */
+export type SiteId = string;
+
+/** One address a pane holds. A pane with several of them offers a switcher. */
+export type PaneSite = {
+  id: SiteId;
+  url: string;
+  /** Creation order. See `layout.sites.ts` for why it is never re-sorted. */
+  createdAt: number;
+};
+
 export type PaneNode = {
   id: PaneId;
   kind: "pane";
   parentId: NodeId | null;
-  url: string | null;
+  /** Creation order, never reordered. `layout.sites.ts` explains the cost. */
+  sites: PaneSite[];
+  /** Which site is on screen. `null` exactly when `sites` is empty. */
+  activeSiteId: SiteId | null;
   urlBarVisible: boolean;
   strategy: PaneStrategy;
   /** Creation order. Keeps the flat pane layer in a stable order forever. */

@@ -7,22 +7,24 @@ import {
   requirePane,
   requireSplit,
 } from "./layout.node.ts";
-import { isDocked, type MakeId } from "./layout.tree.ts";
+import { insertPaneBeside, isDocked, type MakeId } from "./layout.tree.ts";
 import type {
   LayoutNode,
   LayoutTree,
   NodeId,
   PaneId,
   SplitDirection,
-  SplitNode,
 } from "./layout.types.ts";
 
 /**
  * Removes a leaf from the tree and promotes its sibling into the parent's slot,
- * inheriting the parent's share of space. The pane's own node is left in place;
- * callers decide whether to delete it or move it to the dock.
+ * inheriting the parent's share of space. The pane's own node is left in place
+ * with a now-dangling `parentId`; callers decide whether to delete it, move it
+ * to the dock, or re-insert it elsewhere, and must do so before the tree is
+ * handed on. Only the "last pane in the tree" branch mints an id, so callers
+ * that have ruled that branch out may pass any `now`.
  */
-function detachLeaf(
+export function detachLeaf(
   tree: LayoutTree,
   paneId: PaneId,
   makeId: MakeId,
@@ -114,34 +116,22 @@ export function undockPane(
   if (!isDocked(tree, paneId)) {
     throw new Error(`Pane "${paneId}" is not docked`);
   }
-  const host = requirePane(tree, hostPaneId);
+  requirePane(tree, hostPaneId);
   if (isDocked(tree, hostPaneId)) {
     throw new Error(`Host pane "${hostPaneId}" is docked and cannot host`);
   }
 
-  const splitId = makeId();
-  const split: SplitNode = {
-    id: splitId,
-    kind: "split",
-    parentId: host.parentId,
-    direction,
-    children: [hostPaneId, paneId],
-    sizes: [0.5, 0.5],
+  // Undock lands the pane after the host, which is what the two directions
+  // meant before sides existed.
+  const inserted = insertPaneBeside(
+    tree,
+    paneId,
+    hostPaneId,
+    direction === "row" ? "right" : "bottom",
+    makeId,
+  );
+  return {
+    ...inserted,
+    dock: inserted.dock.filter((entry) => entry.paneId !== paneId),
   };
-
-  const nodes: Record<NodeId, LayoutNode> = {
-    ...tree.nodes,
-    [hostPaneId]: { ...host, parentId: splitId },
-    [paneId]: { ...requirePane(tree, paneId), parentId: splitId },
-    [splitId]: split,
-  };
-  const dock = tree.dock.filter((entry) => entry.paneId !== paneId);
-
-  if (host.parentId === null) {
-    return { ...tree, rootId: splitId, nodes, dock };
-  }
-
-  const parent = requireSplit(tree, host.parentId);
-  nodes[parent.id] = replaceChild(parent, hostPaneId, splitId);
-  return { ...tree, nodes, dock };
 }

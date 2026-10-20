@@ -18,6 +18,13 @@ import {
 /** Hard ceiling on a stored wall, so one request cannot write an unbounded file. */
 export const MAX_NODES = 512;
 
+/**
+ * Ceiling on the addresses one pane may carry. `MAX_NODES` counts nodes, so
+ * without this a single pane could arrive holding a million sites and the
+ * node count would still look fine.
+ */
+export const MAX_SITES_PER_PANE = 64;
+
 /** Longest URL accepted in a payload. Well past any real dashboard address. */
 const MAX_URL_LENGTH = 2048;
 
@@ -92,22 +99,24 @@ export function parseWallSnapshot(value: unknown): WallSnapshot {
     fail(`"layout" holds ${nodeCount} nodes, more than the limit of ${MAX_NODES}`);
   }
 
-  const settings = parseSettings(raw.settings);
-
-  const currentUrls: Record<string, string | null> = {};
-  if (raw.currentUrls !== undefined) {
-    const entries = asRecord(raw.currentUrls, "currentUrls");
-    for (const [paneId, url] of Object.entries(entries)) {
-      const node = tree.nodes[paneId];
-      if (node === undefined || !isPane(node)) {
-        fail(`"currentUrls" names "${paneId}", which is not a pane in this layout`);
-      }
-      currentUrls[paneId] =
-        url === null ? null : parseStoredUrl(url, `currentUrls.${paneId}`);
+  // A site url is handed straight to a frame on the next restart, so it is
+  // checked rather than trusted for having arrived inside the tree. These are
+  // now the only urls in a payload; anything else a client sends is ignored.
+  for (const node of Object.values(tree.nodes)) {
+    if (!isPane(node)) continue;
+    if (node.sites.length > MAX_SITES_PER_PANE) {
+      fail(
+        `"layout" gives pane "${node.id}" ${node.sites.length} sites, more than the limit of ${MAX_SITES_PER_PANE}`,
+      );
+    }
+    for (const site of node.sites) {
+      parseStoredUrl(site.url, `layout.tree.nodes.${node.id}.sites.${site.id}`);
     }
   }
 
-  return { layout: serializeLayout(tree), settings, currentUrls };
+  const settings = parseSettings(raw.settings);
+
+  return { layout: serializeLayout(tree), settings };
 }
 
 /**

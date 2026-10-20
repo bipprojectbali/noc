@@ -29,10 +29,13 @@ import { useEffect, useState } from "react";
 import type { PaneId, PaneStrategy, SplitDirection } from "../layout/layout.types.ts";
 import { SessionMenuItem } from "../session/session.menu-item.tsx";
 import { PaneMenuRendererField } from "./pane.menu-renderer-field.tsx";
+import { PaneMenuSites } from "./pane.menu-sites.tsx";
+import type { PaneSitesControl } from "./pane.site-switcher.tsx";
 
 export type PaneMenuPanelProps = {
   paneId: PaneId;
   url: string | null;
+  sites: PaneSitesControl;
   error: string | null;
   strategy: PaneStrategy;
   nativeHost: boolean;
@@ -46,6 +49,7 @@ export type PaneMenuPanelProps = {
 export function PaneMenuPanel({
   paneId,
   url,
+  sites,
   error,
   strategy,
   nativeHost,
@@ -56,10 +60,13 @@ export function PaneMenuPanel({
   onClose,
 }: PaneMenuPanelProps) {
   const [draft, setDraft] = useState(url ?? "");
+  /** Whether Enter appends a page instead of repointing the one on screen. */
+  const [adding, setAdding] = useState(false);
 
   // Follow the pane's url when it changes elsewhere, without fighting typing.
   useEffect(() => {
     setDraft(url ?? "");
+    setAdding(false);
   }, [url]);
 
   const actions = [
@@ -74,14 +81,21 @@ export function PaneMenuPanel({
         className="noc-pane__menu-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit(draft);
+          if (adding) sites.add(draft);
+          else onSubmit(draft);
         }}
       >
         <input
+          // Remounted when the mode changes so `autoFocus` puts the caret back
+          // in the field the user has just been told to type in.
+          key={adding ? "add" : "point"}
           className="noc-pane__input"
-          aria-label={`URL for pane ${paneId}`}
+          autoFocus
+          aria-label={
+            adding ? `New site URL for pane ${paneId}` : `URL for pane ${paneId}`
+          }
           aria-invalid={error !== null}
-          placeholder="URL, then Enter"
+          placeholder={adding ? "New site URL, then Enter" : "URL, then Enter"}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
         />
@@ -98,6 +112,16 @@ export function PaneMenuPanel({
         strategy={strategy}
         nativeHost={nativeHost}
         onStrategyChange={onStrategyChange}
+      />
+
+      <PaneMenuSites
+        paneId={paneId}
+        sites={sites}
+        adding={adding}
+        onAddMode={() => {
+          setAdding(true);
+          setDraft("");
+        }}
       />
 
       <div className="noc-pane__menu-rule" />

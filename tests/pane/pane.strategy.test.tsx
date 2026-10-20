@@ -14,9 +14,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 
 import { PaneFrame } from "../../src/pane/pane.frame.tsx";
 import { rendererChange } from "../../src/pane/pane.renderer.ts";
-import { paneLoadState, useWallStore } from "../../src/pane/pane.store.ts";
+import { paneLoadState } from "../../src/pane/pane.store-sites.ts";
+import { useWallStore } from "../../src/pane/pane.store.ts";
 import type { PaneStrategy } from "../../src/layout/layout.types.ts";
-import { resetWallStore, settleAsyncWork } from "../fixtures/wall-store.ts";
+import { resetWallStore, settleAsyncWork, siteIdsOf } from "../fixtures/wall-store.ts";
 
 const WAIT = { timeout: 2000 };
 
@@ -41,9 +42,17 @@ function leaveNativeHost(): void {
     .__TAURI_INTERNALS__;
 }
 
+/**
+ * The native commands aimed at any of a pane's sites.
+ *
+ * A webview belongs to a site rather than to the pane, so the label the shell
+ * is given is a site id. A pane with one page therefore has one label, and
+ * asking by pane means asking about every label it owns.
+ */
 function commandsFor(paneId: string): string[] {
+  const sites = siteIdsOf(paneId);
   return invokeCalls.flatMap((call) =>
-    call.paneId === paneId ? [call.cmd] : [],
+    sites.some((siteId) => call.paneId === siteId) ? [call.cmd] : [],
   );
 }
 

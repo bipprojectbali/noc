@@ -27,8 +27,22 @@ export type NativeRect = {
 
 /** Mirrors the commands in `src-tauri/src/pane_webview.rs`. */
 export type NativePaneBridge = {
-  /** Creates the pane's webview, or navigates the existing one. */
-  show: (paneId: PaneId, url: string, rect: NativeRect) => Promise<void>;
+  /**
+   * Creates the pane's webview, or places the existing one.
+   *
+   * `navigate` asks the shell to replace the page even if the address has not
+   * changed — a reload, in other words. Left out, a webview already at `url` is
+   * only placed: this page forgets which panes it has opened every time it
+   * reloads, so without that the first call after a reload would send every
+   * pane back to the address the layout holds, discarding wherever the user had
+   * browsed to and any session they had logged into there.
+   */
+  show: (
+    paneId: PaneId,
+    url: string,
+    rect: NativeRect,
+    navigate?: boolean,
+  ) => Promise<void>;
   /** Moves it and sets whether it is on screen. Hiding never destroys it. */
   place: (paneId: PaneId, rect: NativeRect, visible: boolean) => Promise<void>;
   /** Destroys it. Only a deleted pane should reach this. */
@@ -74,13 +88,25 @@ export function isNativeHost(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-export const nativePaneBridge: NativePaneBridge = {
-  show: (paneId, url, rect) =>
-    invoke("pane_webview_show", { paneId, url, rect }),
-  place: (paneId, rect, visible) =>
-    invoke("pane_webview_place", { paneId, rect, visible }),
-  close: (paneId) => invoke("pane_webview_close", { paneId }),
+export type NativePaneBridgeDeps = {
+  invoke: (command: string, args: Record<string, unknown>) => Promise<void>;
 };
+
+export function createNativePaneBridge(
+  deps: NativePaneBridgeDeps,
+): NativePaneBridge {
+  return {
+    show: (paneId, url, rect, navigate) =>
+      deps.invoke("pane_webview_show", { paneId, url, rect, navigate }),
+    place: (paneId, rect, visible) =>
+      deps.invoke("pane_webview_place", { paneId, rect, visible }),
+    close: (paneId) => deps.invoke("pane_webview_close", { paneId }),
+  };
+}
+
+export const nativePaneBridge: NativePaneBridge = createNativePaneBridge({
+  invoke: (command, args) => invoke(command, args),
+});
 
 export type NativeCookieBridgeDeps = {
   invoke: (

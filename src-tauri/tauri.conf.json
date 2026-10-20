@@ -18,6 +18,9 @@
     "active": true,
     "targets": ["app", "dmg"],
     "icon": [],
-    "externalBin": ["binaries/noc-server"]
+    "externalBin": ["binaries/noc-server"],
+    "macOS": {
+      "entitlements": "Entitlements.plist"
+    }
   }
 }
