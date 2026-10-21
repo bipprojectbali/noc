@@ -5,7 +5,7 @@
  */
 
 import index from "../../index.html";
-import { readConfig } from "../config/config.env.ts";
+import { databasePath, readConfig } from "../config/config.env.ts";
 import { WALL_PROXY_HOSTNAME } from "../proxy/proxy.label.ts";
 import { createProxyHandler } from "../proxy/proxy.handler.ts";
 import { proxySiteRegistry } from "../proxy/proxy.registry.ts";
@@ -47,6 +47,10 @@ try {
 // the endpoints answer 503 with the reason, so no save is ever reported as done.
 const wallAccess = openWallAccess(config, process.cwd());
 if (!wallAccess.ok) console.error(wallAccess.reason);
+// Printed on every start because the answer moves: the dev server keeps it in
+// the project, while the compiled binary resolves a per-user directory the
+// operator never named and would otherwise have to guess at.
+console.info(`Wall database: ${databasePath(config, process.cwd())}`);
 const wall = createWallRoutes(wallAccess);
 
 // The same socket serves the wall page and every site the wall frames, told
