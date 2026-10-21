@@ -2,10 +2,10 @@
  * The pane menu: how it opens and closes, and what it costs while it is open.
  *
  * The suppressor is observed by registering a counting one of its own rather
- * than by reaching into the webview renderer — `resize.pointer-capture` is a
- * registry of ports, and a test that registers one sees exactly what a real
- * renderer would. The registry lives at module level, so each test takes its
- * own back out again.
+ * than by reaching into the renderer — `resize.pointer-capture` is a registry
+ * of ports, and a test that registers one sees exactly what a real renderer
+ * would. The registry lives at module level, so each test takes its own back
+ * out again.
  *
  * Nothing here says anything about layout. happy-dom measures every element as
  * zero; whether the panel is really visible over a pane is a question only a
@@ -118,9 +118,9 @@ describe("⋮ is the only permanent chrome, and it opens the rest", () => {
     // happy-dom measures nothing, so this asserts the mechanism rather than the
     // result: an absolutely positioned chrome is the only kind that takes no
     // room from the body. Whether it is really flush is a question for a
-    // running browser. One class and no renderer branch is the point — the
-    // 20px row a webview pane used to reserve is what made the wall look
-    // stitched together, and the shell now stands in for the button instead.
+    // running browser. One class and no branch is the point: a reserved row
+    // above the page, which an earlier build gave some panes, is what made the
+    // wall read as stitched together out of boxes.
     expect(screen.getByTestId(`pane-chrome-${ROOT}`).className).toBe(
       "noc-pane__chrome",
     );

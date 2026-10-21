@@ -4,20 +4,13 @@
  * The first attempt stretched every control to the pane's width, which read as
  * a form bolted to a dashboard. This is the shape people know — a narrow card
  * under the button, single-line rows, groups parted one way and only one way,
- * the destructive item last and in the danger colour. The width is fixed so
- * the panel fits the smallest pane a wall will make, and it is 224px because
- * that is the longest renderer label: an option nobody can finish reading is
- * not an option.
+ * the destructive item last and in the danger colour. The width is fixed so the
+ * panel fits the smallest pane a wall will make.
  *
  * Three groups: what the pane shows, what to do to it, and the one that
- * destroys it. Address and renderer sit together because they answer the same
- * question, so they share one geometry. Cookie import sits with the actions
- * even though it is wall-wide rather than per pane: there is no wall-level
- * menu to put it in, and every pane's ⋮ is the same door onto it. The address
- * is first because giving a pane a URL is the one thing this menu exists for;
- * Enter submits it, and a Go button bought nothing a form already does. Each
- * renderer label names its cost, because switching rebuilds the content and
- * the site reloads.
+ * destroys it. The address is first because giving a pane a URL is the one thing
+ * this menu exists for; Enter submits it, and a Go button bought nothing a form
+ * already does.
  *
  * Split from `pane.menu` along the line that matters rather than to make two
  * files: that one owns the panel's lifetime, this one owns its contents and
@@ -26,9 +19,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import type { PaneId, PaneStrategy, SplitDirection } from "../layout/layout.types.ts";
-import { SessionMenuItem } from "../session/session.menu-item.tsx";
-import { PaneMenuRendererField } from "./pane.menu-renderer-field.tsx";
+import type { PaneId, SplitDirection } from "../layout/layout.types.ts";
 import { PaneMenuSites } from "./pane.menu-sites.tsx";
 import { PaneMenuZoomField, type PaneZoomControl } from "./pane.menu-zoom.tsx";
 import type { PaneSitesControl } from "./pane.site-switcher.tsx";
@@ -80,11 +71,8 @@ export type PaneMenuPanelProps = {
   sites: PaneSitesControl;
   zoom: PaneZoomControl;
   error: string | null;
-  strategy: PaneStrategy;
-  nativeHost: boolean;
   onSubmit: (raw: string) => void;
   onReload: () => void;
-  onStrategyChange: (strategy: PaneStrategy) => void;
   onSplit: (direction: SplitDirection) => void;
   onClose: () => void;
 };
@@ -95,11 +83,8 @@ export function PaneMenuPanel({
   sites,
   zoom,
   error,
-  strategy,
-  nativeHost,
   onSubmit,
   onReload,
-  onStrategyChange,
   onSplit,
   onClose,
 }: PaneMenuPanelProps) {
@@ -177,15 +162,8 @@ export function PaneMenuPanel({
         </span>
       )}
 
-      <PaneMenuRendererField
-        paneId={paneId}
-        strategy={strategy}
-        nativeHost={nativeHost}
-        onStrategyChange={onStrategyChange}
-      />
-
-      {/* With the renderer and not with the actions: both answer "how is this
-          page shown", and neither closes the menu — zoom is stepped while the
+      {/* Above the actions, not among them: it answers "how is this page
+          shown", and it does not close the menu — zoom is stepped while the
           result is watched, which the action rows below are not. */}
       <PaneMenuZoomField paneId={paneId} zoom={zoom} />
 
@@ -213,8 +191,6 @@ export function PaneMenuPanel({
           {item.label}
         </button>
       ))}
-
-      <SessionMenuItem paneId={paneId} nativeHost={nativeHost} />
 
       <div className="noc-pane__menu-rule" />
 

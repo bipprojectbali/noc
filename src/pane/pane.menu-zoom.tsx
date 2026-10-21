@@ -3,14 +3,13 @@
  *
  * It lives in the menu because there is nowhere else it could. Ctrl+scroll and
  * pinch over the page are impossible from here — a cross-origin iframe keeps
- * wheel events inside its own document, and a native webview takes input at OS
- * level before the web layer sees it — so the only surfaces this app can hear
- * are its own chrome. No keyboard shortcut either: the wall page never has
- * focus while someone is looking at a pane.
+ * wheel events inside its own document — so the only surfaces this app can
+ * hear are its own chrome. No keyboard shortcut either: the wall page never
+ * has focus while someone is looking at a pane.
  *
- * Its own file for the same reason `pane.menu-renderer-field` is: the panel is
- * already past this repo's 150-line cap for a component, and this block reads
- * one site field and writes it back, sharing nothing with the rows around it.
+ * Its own file because the panel is already past this repo's 150-line cap for a
+ * component, and this block reads one site field and writes it back, sharing
+ * nothing with the rows around it.
  *
  * The level doubles as the way back to 100% — a fourth button for "reset" in a
  * 224px panel buys nothing a click on the number does not, and the number is
@@ -36,13 +35,6 @@ import {
 export type PaneZoomControl = {
   /** The active page's level, or null when the pane holds no page to magnify. */
   level: number | null;
-  /**
-   * False when the pane renders as a native child webview. Magnifying it would
-   * mean a fifth `invoke` and a WebKit page-zoom API this build does not call;
-   * the row is shown disabled rather than hidden, so the limit reads as the
-   * renderer's and not as a missing feature.
-   */
-  applies: boolean;
   set: (level: number) => void;
 };
 
@@ -50,14 +42,10 @@ export type PaneMenuZoomFieldProps = { paneId: PaneId; zoom: PaneZoomControl };
 
 export function PaneMenuZoomField({ paneId, zoom }: PaneMenuZoomFieldProps) {
   const level = zoom.level ?? DEFAULT_ZOOM;
-  const off = !zoom.applies || zoom.level === null;
+  const off = zoom.level === null;
   // On the wrapper, not the buttons: a disabled button takes no pointer, so a
   // title on it is a tooltip nobody can summon.
-  const reason = !zoom.applies
-    ? "A native webview is an OS-level view; no CSS reaches it."
-    : zoom.level === null
-      ? "This pane has no page to magnify yet."
-      : undefined;
+  const reason = off ? "This pane has no page to magnify yet." : undefined;
 
   return (
     <div className="noc-pane__menu-field">

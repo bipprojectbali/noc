@@ -9,15 +9,18 @@
  * headers to classify framing, so it can know this before the attempt — and
  * saying nothing is what turns a browser rule into "the app is broken".
  *
- * Why this shape, and not an overlay. It only ever renders for an iframe pane,
- * because a native webview is a top-level document where `SameSite` does not
- * apply at all — so the case invariant 3 guards against (a native view painting
- * above the web layer) cannot arise here. What is left is the page itself,
- * which may still be worth reading: this sits at the foot of the body's single
- * grid cell as a sibling of the frame rather than across it, and takes no
- * pointer events, so the page underneath stays clickable where it shows
- * through. Deliberately not dismissible — a dismissal is per-pane state, and
- * nothing has yet shown that the line is in the way.
+ * Why this shape, and not an overlay. The page underneath may still be worth
+ * reading, so this sits at the foot of the body's single grid cell as a sibling
+ * of the frame rather than across it, and takes no pointer events, so the page
+ * stays clickable where it shows through. Deliberately not dismissible — a
+ * dismissal is per-pane state, and nothing has yet shown that the line is in
+ * the way.
+ *
+ * One wall can see it: the cookies it warns about travel again as soon as the
+ * site is served from a sibling subdomain of the wall's own host, and on such a
+ * wall `/api/embeddability` answers without a verdict for this to carry. So it
+ * speaks for a wall opened at `127.0.0.1` — which is what its advice points
+ * away from.
  */
 
 import {
@@ -30,15 +33,9 @@ export type PaneCookieNoticeProps = {
   paneId: PaneId;
   /** The verdict carried by the pane's active site, if its probe has settled. */
   decision: FrameCookieDecision | undefined;
-  /** In a browser the way out is the desktop app; in the shell it is the menu. */
-  nativeHost: boolean;
 };
 
-export function PaneCookieNotice({
-  paneId,
-  decision,
-  nativeHost,
-}: PaneCookieNoticeProps) {
+export function PaneCookieNotice({ paneId, decision }: PaneCookieNoticeProps) {
   // "unknown" is the common case and must stay silent: a login page often sets
   // no cookie on the GET this verdict came from, and guessing would cry wolf.
   if (decision === undefined || decision.verdict !== "blocked") return null;
@@ -54,10 +51,10 @@ export function PaneCookieNotice({
       data-testid={`pane-cookie-warning-${paneId}`}
     >
       <strong>Signing in here will not stick.</strong> A framed page is
-      cross-site, so the browser keeps these cookies out of it: {named}.{" "}
-      {nativeHost
-        ? "Set this pane's renderer to Webview in its ⋮ menu — a native webview is a top-level document — or have the site send SameSite=None; Secure; Partitioned."
-        : "Open this wall in the desktop app and set the pane's renderer to Webview, or have the site send SameSite=None; Secure; Partitioned."}
+      cross-site, so the browser keeps these cookies out of it: {named}. Open
+      this wall at its own hostname, where the site is served same-site and
+      these cookies travel, or have the site send SameSite=None; Secure;
+      Partitioned.
     </div>
   );
 }

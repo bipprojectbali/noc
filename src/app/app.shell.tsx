@@ -4,7 +4,6 @@ import { geometryRegistry } from "../geometry/geometry.store.ts";
 import { domRectReader, syncPaneGeometry } from "../geometry/geometry.sync.ts";
 import { LayoutRenderer } from "../layout/layout.renderer.tsx";
 import { PaneLayer } from "../pane/pane.layer.tsx";
-import { placePane } from "../pane/pane.renderer.ts";
 import { useWallStore } from "../pane/pane.store.ts";
 
 /**
@@ -26,7 +25,7 @@ export function AppShell() {
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (container === null) return;
-    syncPaneGeometry(container, geometryRegistry, domRectReader, placePane);
+    syncPaneGeometry(container, geometryRegistry, domRectReader);
   }, [tree]);
 
   useEffect(() => {
@@ -35,7 +34,7 @@ export function AppShell() {
     if (typeof ResizeObserver === "undefined") return;
 
     const observer = new ResizeObserver(() => {
-      syncPaneGeometry(container, geometryRegistry, domRectReader, placePane);
+      syncPaneGeometry(container, geometryRegistry, domRectReader);
     });
     observer.observe(container);
     for (const slot of container.querySelectorAll("[data-pane-slot]")) {

@@ -4,14 +4,13 @@
  * Without it a drag dies the moment the pointer crosses a pane: the pane eats
  * the move events and the splitter never hears them again.
  *
- * Why this is a seam and not simply a CSS class. `pointer-events` is a CSS
- * concept, so it only reaches panes that are iframes. A native webview is not
- * in the DOM at all — it takes mouse input at the OS level over the region it
- * occupies — and no stylesheet can quiet it. So "stop the panes taking the
- * cursor" is the concept, and the body class below is one implementation of it.
- * The webview renderer registers its own suppressor here (ignore-cursor-events,
- * or hiding for the duration of the drag) instead of this module growing a
- * second mechanism and a branch to choose between them.
+ * Why this is still a seam and not simply a CSS class. "Stop the panes taking
+ * the cursor" is the concept; the body class below is one implementation of it,
+ * and the registry is what kept this module from growing a branch per renderer
+ * back when a pane could also be something CSS cannot reach. Three callers
+ * share it now — splitter drags, the ⋮ panel and a pane drag — and each of them
+ * wants the concept, not the class. A second implementation, if one is ever
+ * needed again, registers itself rather than being chosen between here.
  */
 
 export const RESIZING_BODY_CLASS = "noc-resizing";
@@ -35,7 +34,7 @@ export function registerPanePointerSuppressor(
 
 /**
  * The iframe implementation: a class on `<body>`, paired with the rule in
- * `app.css`. Deliberately not React state — re-rendering the pane layer to
+ * `app.base.css`. Deliberately not React state — re-rendering the pane layer to
  * quiet the frames could disturb the very frames it is protecting.
  */
 export const iframePanePointerSuppressor: PanePointerSuppressor = {

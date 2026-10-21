@@ -1,15 +1,14 @@
 /**
  * What a pane drag costs the wall while it runs, and what it shows for it.
  *
- * The two are one subject: the overlay is only legal because the suppressor is
- * held, which hides every native webview, and the suppressor is only bearable
- * because the overlay says why the wall went quiet. The tree edit a drag lands
- * is `pane.drag.test`; the rig both share is `fixtures/pane-drag`.
+ * The two are one subject: the suppressor is held for the length of the drag
+ * so the pages stop swallowing the pointer, and the overlay is what says why
+ * the wall went quiet. The tree edit a drag lands is `pane.drag.test`; the rig
+ * both share is `fixtures/pane-drag`.
  *
  * Every drag here is started on a two-pane wall whose rects the test supplied.
- * Whether the highlight is legible over a real site, and whether a wall mixing
- * live iframes with blanked webviews reads as anything but broken, are
- * questions only a running app answers.
+ * Whether the highlight is legible over a real site is a question only a
+ * running app answers.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -177,8 +176,8 @@ describe("the drop overlay says what is about to happen", () => {
     press(ROOT, 10, 10);
     move(1000, 1000);
 
-    // Off the wall: nothing is a target, and the other pane — blank if it is a
-    // webview — still has to read as a pane rather than as something broken.
+    // Off the wall: nothing is a target, and the pane that is neither end of
+    // the drag still has to read as a pane rather than as something broken.
     expect(
       screen.getByTestId(`pane-drop-${other}`).getAttribute("data-drop-role"),
     ).toBe("idle");

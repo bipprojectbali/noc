@@ -40,8 +40,8 @@ export type RearrangeResult =
 
 /**
  * Pulls `paneId` out of its current slot and re-inserts it on one edge of
- * `targetPaneId`. The pane node — and therefore its id, url, strategy and
- * renderer — survives untouched; only split nodes are created and destroyed.
+ * `targetPaneId`. The pane node — and therefore its id and every site it
+ * holds — survives untouched; only split nodes are created and destroyed.
  *
  * Dropping a pane onto itself is a no-op rather than an error, so a drag that
  * ends where it started needs no special case in the caller.

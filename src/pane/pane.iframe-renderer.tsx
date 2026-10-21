@@ -1,12 +1,11 @@
 /**
- * The browser path: a pane is an iframe.
+ * A pane is an iframe. The only way a site gets into one.
  *
- * Kept as a first-class renderer, not a fallback. Layout and UI work happens
- * here because `bun run dev` reloads in milliseconds and devtools can see
- * everything, while the native shell has to be rebuilt to be looked at.
- *
- * Its limit is the reason the webview renderer exists: a site sending
- * `X-Frame-Options: sameorigin` cannot be shown here, by anyone, ever.
+ * The limit that used to make this one of two renderers — a site sending
+ * `X-Frame-Options: sameorigin` cannot be framed by a stranger — is answered by
+ * serving the site from a subdomain of the wall's own host instead of by a
+ * native webview, so there is no second renderer to fall back to. See
+ * `src/proxy/` for why that is also what lets a pane keep a session.
  *
  * One of these is mounted per *site*, not per pane, and the pane body stacks
  * them all in one grid cell. The site that is not on screen is hidden with
@@ -16,15 +15,8 @@
  */
 
 import { proxySiteUrl } from "../proxy/proxy.label.ts";
-import {
-  paneContentTestId,
-  type PaneContentProps,
-  type PaneRenderer,
-} from "./pane.renderer.ts";
+import { paneContentTestId, type PaneContentProps } from "./pane.renderer.ts";
 import { useWallStore } from "./pane.store.ts";
-
-/** Set on the body for the duration of a drag. See `setCursorCapture`. */
-export const NO_CURSOR_CAPTURE_CLASS = "noc-no-pane-cursor";
 
 /**
  * Permissions Policy delegated to every pane.
@@ -41,18 +33,22 @@ export const NO_CURSOR_CAPTURE_CLASS = "noc-no-pane-cursor";
  *
  * This is wall-wide on purpose, and it is a real widening — every address the
  * operator types can now ask for the camera. Three things bound it: the pane's
- * URL is always typed by the operator, the wall binds to loopback, and in a
- * browser the user still gets the permission prompt. The exception is the
- * native shell, where wry grants capture without asking; see
- * `src-tauri/src/pane_webview.rs`. Making this per-pane means a new field on the
- * pane node, which is a schema change, not a toggle.
+ * URL is always typed by the operator, the wall binds to loopback, and the user
+ * still gets the browser's own permission prompt. Making this per-pane means a
+ * new field on the pane node, which is a schema change, not a toggle.
  *
  * Deliberately absent: `display-capture` and `geolocation`. Neither was asked
  * for, and screen capture is a wider grant than the camera.
  */
 export const PANE_ALLOW_POLICY = "camera; microphone";
 
-function PaneIframe({ paneId, siteId, load, active, zoom }: PaneContentProps) {
+export function PaneIframe({
+  paneId,
+  siteId,
+  load,
+  active,
+  zoom,
+}: PaneContentProps) {
   const dispatchLoad = useWallStore((state) => state.dispatchLoad);
 
   // Only these two states have a frameable url; the rest are the chrome's job.
@@ -61,7 +57,7 @@ function PaneIframe({ paneId, siteId, load, active, zoom }: PaneContentProps) {
   // The address the user typed stays the address the store holds and the menu
   // shows; only the frame is pointed at this wall's own host, which is what
   // lets the site keep a session (`src/proxy/proxy.label.ts`). On a wall where
-  // that cannot work — `127.0.0.1`, the native shell — this is the typed url
+  // that cannot work — one opened at `127.0.0.1` — this is the typed url
   // unchanged, so nothing about the pane changes there.
   const frameSrc =
     pageUrl === undefined
@@ -101,20 +97,3 @@ function PaneIframe({ paneId, siteId, load, active, zoom }: PaneContentProps) {
   );
 }
 
-export const paneIframeRenderer: PaneRenderer = {
-  kind: "iframe",
-  Content: PaneIframe,
-
-  // Nothing to do: an iframe is inside its host, so the host's rect places it.
-  place: () => {},
-
-  // Nothing to release: React removes the iframe with the host.
-  release: () => {},
-
-  releaseSite: () => {},
-
-  setCursorCapture: (capturing) => {
-    if (typeof document === "undefined") return;
-    document.body.classList.toggle(NO_CURSOR_CAPTURE_CLASS, !capturing);
-  },
-};

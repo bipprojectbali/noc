@@ -3,24 +3,23 @@
  *
  * The handle is the ⋮ button, and it is the only candidate there is. A press on
  * a pane's body cannot be heard: an iframe is cross-origin and keeps the event
- * inside its own document, and a native child webview takes mouse input at the
- * OS level before the web layer sees anything. ⋮ is the one surface this app
- * owns that exists on a loaded pane under both renderers, so press-and-move
- * there is a drag and press-and-release is still the menu. The whole difference
- * between the two gestures is `DRAG_THRESHOLD_PX`.
+ * inside its own document. ⋮ is the one surface this app owns that exists on a
+ * loaded pane, so press-and-move there is a drag and press-and-release is still
+ * the menu. The whole difference between the two gestures is
+ * `DRAG_THRESHOLD_PX`.
  *
- * Its own store rather than fields on the wall store, for the reason
- * `session.store` gives: the wall store is at its line budget, and a drag is a
- * gesture in flight rather than wall state — nothing about it is persisted, and
+ * Its own store rather than fields on the wall store: the wall store is at its
+ * line budget, and a drag is a gesture in flight rather than wall state —
+ * nothing about it is persisted, and
  * it has to be readable from every pane at once so each can say whether it is
  * the one being dragged, the one being dropped on, or neither. The commit is
  * still the wall store's: `rearrangePane` owns the tree, this owns the gesture.
  *
  * While a drag runs it holds `suspendPanePointerCapture` — the same seam the
- * splitter and the menu use. That is not decoration. Every native webview goes
- * blank for the duration, which is what lets an overlay be drawn over one at
- * all, and the iframes stop taking the pointer, which is what keeps the moves
- * arriving at this window. The hold is one effect keyed on "is this pane the
+ * splitter and the menu use. That is not decoration: the iframes stop taking
+ * the pointer, which is what keeps the moves arriving at this window, and what
+ * lets the drop overlay be hit-tested at all. The hold is one effect keyed on
+ * "is this pane the
  * one being dragged", so every way a drag can end — drop, Escape, lost focus, a
  * cancelled pointer, the pane itself being deleted mid-drag — releases it once
  * and exactly once. No call site below releases by hand.
@@ -103,8 +102,7 @@ export const usePaneDragStore = create<PaneDragState>((set, get) => ({
  *
  * `elementFromPoint` reaches the right host whatever is on top: a cross-origin
  * iframe answers as the `<iframe>` element itself, which is a child of the
- * host, and a hidden webview leaves its anchor div behind — so `closest` lands
- * on the same host either way.
+ * host, so `closest` lands on the host.
  */
 function paneHostAt(point: Point): { paneId: PaneId; rect: Rect } | null {
   const element = document.elementFromPoint(point.x, point.y);
@@ -208,8 +206,7 @@ export function usePaneDragHandle(
     element.setPointerCapture(event.pointerId);
 
     // On the window, not the element: once the pointer is over another pane the
-    // moves are delivered there, and pointer capture alone does not survive a
-    // native webview, which takes the cursor at OS level.
+    // moves have to keep arriving here rather than at that pane.
     const onMove = (moveEvent: globalThis.PointerEvent): void => {
       const start = startRef.current;
       if (start === null || start.pointerId !== moveEvent.pointerId) return;
