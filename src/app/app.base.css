@@ -1,7 +1,8 @@
 /* Layer 1 of 3, imported first by `app.css`. Everything the rest of the wall
    reads before it can draw anything: the `:root` custom properties, the reset,
-   the document rules that stop the wall from scrolling or bouncing, the notice
-   strip, and the layout tree itself — shell, splits, empty slots, splitters.
+   the document rules that stop the wall from scrolling or bouncing, the two
+   pieces of wall-level chrome — the notice strip and the fullscreen control —
+   and the layout tree itself: shell, splits, empty slots, splitters.
    It is first because of the custom properties: every colour and the splitter
    size are defined here and consumed in the two layers below, so this file can
    never be moved after them. The `body.noc-resizing` pair closes the file
@@ -65,6 +66,82 @@ body {
 }
 
 .noc-notice--error {
+  color: var(--noc-danger);
+}
+
+/* The fullscreen control, the wall's other piece of own chrome. Floating and
+   not in the flex column on purpose: a reserved strip is the shape this project
+   already removed from the pane chrome, because the reserved space is what made
+   the wall read as stitched-from-boxes. Bottom-left is the only free corner —
+   every pane's `⋮` is top right, so the wall's top right belongs to whichever
+   pane is up there. Column-reverse so the toggle stays pinned to the corner and
+   the screen rows grow upward away from it, rather than pushing it around as
+   they appear.
+   The `z-index` is read in the root stacking context, not the pane one: every
+   pane host carries a transform and so caps its own chrome inside itself, which
+   leaves only the lifted host (1) to clear. It is unrelated to the 2/3/4 in the
+   two layers below, which are all inside a host. */
+.noc-fullscreen {
+  position: fixed;
+  z-index: 3;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.noc-fullscreen__toggle,
+.noc-fullscreen__screen {
+  border: 1px solid var(--noc-border);
+  border-radius: 4px;
+  background: var(--noc-chrome);
+  color: var(--noc-muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Square and small: it sits over a dashboard for the whole life of the wall, so
+   it has to be reachable without being part of the picture. Dim until pointed
+   at, which is the pane `⋮` behaviour too. */
+.noc-fullscreen__toggle {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.55;
+}
+
+.noc-fullscreen__screen {
+  max-width: 220px;
+  overflow: hidden;
+  padding: 3px 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.noc-fullscreen__toggle:hover,
+.noc-fullscreen__toggle:focus-visible,
+.noc-fullscreen__screen:hover,
+.noc-fullscreen__screen:focus-visible {
+  border-color: var(--noc-muted);
+  color: var(--noc-text);
+  opacity: 1;
+}
+
+/* The screen the wall is on, so the list says where it already is. */
+.noc-fullscreen__screen[aria-pressed="true"] {
+  color: var(--noc-text);
+}
+
+.noc-fullscreen__problem {
+  max-width: 260px;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--noc-border);
+  border-radius: 4px;
+  background: var(--noc-chrome);
   color: var(--noc-danger);
 }
 

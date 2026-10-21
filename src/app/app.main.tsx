@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router";
 
+import { WallFullscreen } from "../display/display.fullscreen.tsx";
 import { useWallStore } from "../pane/pane.store.ts";
 import { createWallClient } from "../persist/persist.client.ts";
 import { PersistenceNotice } from "../persist/persist.notice.tsx";
@@ -27,6 +28,10 @@ createRoot(container).render(
     <div className="noc-root">
       <PersistenceNotice />
       <RouterProvider router={createAppRouter()} />
+      {/* After the router, not before: it floats over the wall rather than
+          taking a row above it, and painting last is what keeps it reachable
+          without a z-index that has to beat anything inside a pane. */}
+      <WallFullscreen />
     </div>
   </StrictMode>,
 );
