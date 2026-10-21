@@ -22,6 +22,7 @@
  */
 
 import { siteLabelOf, wallLandingHostname } from "../proxy/proxy.label.ts";
+import { withPwaHead } from "../pwa/pwa.head.ts";
 import type { ProxySiteRegistry } from "../proxy/proxy.registry.ts";
 import { upgradeProxySocket, type ProxySocketData } from "../proxy/proxy.socket.ts";
 
@@ -77,12 +78,27 @@ export function createHostDispatch(deps: HostDispatchDeps) {
    * Chrome promises to resolve `*.localhost` to loopback, the OS resolver this
    * process uses makes no such promise, and reading the port off the incoming
    * URL avoids handing the bound port in after `Bun.serve` returns.
+   *
+   * The install tags are added on the way back rather than written into
+   * `index.html`, which Bun's bundler will not allow — see `pwa.head.ts`. This
+   * is the one place every browser-facing wall address passes through.
    */
   const wallDocument = async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     const authority = url.port === "" ? "127.0.0.1" : `127.0.0.1:${url.port}`;
-    return fetchShell(`http://${authority}${WALL_SHELL_PATH}`, {
+    const document = await fetchShell(`http://${authority}${WALL_SHELL_PATH}`, {
       headers: { accept: request.headers.get("accept") ?? "text/html" },
+    });
+    const html = withPwaHead(await document.text());
+    const headers = new Headers(document.headers);
+    // The body just grew; a length measured before that is a truncated page.
+    // Same hazard as the proxy's, for the same reason (`proxy.headers.ts`).
+    headers.delete("content-length");
+    headers.delete("content-encoding");
+    return new Response(html, {
+      status: document.status,
+      statusText: document.statusText,
+      headers,
     });
   };
 

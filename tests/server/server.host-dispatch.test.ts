@@ -18,6 +18,7 @@ import {
 } from "../../src/server/server.host-dispatch.ts";
 import { createProxySiteRegistry } from "../../src/proxy/proxy.registry.ts";
 import { siteLabel } from "../../src/proxy/proxy.label.ts";
+import { WEB_MANIFEST_PATH } from "../../src/pwa/pwa.manifest.ts";
 
 const UPSTREAM = "https://grafana.internal";
 
@@ -37,7 +38,7 @@ function dispatchFor() {
     },
     fetch: (async (input: string) => {
       shellRequests.push(String(input));
-      return new Response("<!doctype html>wall", {
+      return new Response("<!doctype html><html><head></head><body>wall</body></html>", {
         headers: { "content-type": "text/html" },
       });
     }) as unknown as typeof fetch,
@@ -98,6 +99,19 @@ describe("the catch-all", () => {
     expect(await response.text()).toContain("wall");
     // 127.0.0.1, not the hostname: only Chrome promises to resolve *.localhost.
     expect(shellRequests).toEqual([`http://127.0.0.1:7788${WALL_SHELL_PATH}`]);
+  });
+
+  test("the wall document carries the install tags, which index.html cannot", async () => {
+    // The one place every browser-facing wall address goes through, so this is
+    // where the manifest link has to be or it is nowhere. See `pwa.head.ts`.
+    const { dispatch } = dispatchFor();
+    const response = await dispatch.catchAll(
+      new Request("http://wall.noc.localhost:7788/view/abc"),
+      noUpgrade,
+    );
+    expect(await response.text()).toContain(
+      `<link rel="manifest" href="${WEB_MANIFEST_PATH}">`,
+    );
   });
 
   test("a site host gets its own home page, not the wall", async () => {
