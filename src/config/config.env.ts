@@ -11,12 +11,6 @@ export type NocConfig = {
   dataDir: string;
   dbFile: string;
   logLevel: LogLevel;
-  /**
-   * Process to outlive nothing: when this pid disappears the server exits.
-   * Set by the Tauri shell when it spawns this binary as a sidecar; `null` for a
-   * standalone dev server, which the operator stops themselves.
-   */
-  parentPid: number | null;
 };
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -42,17 +36,6 @@ function readPort(raw: string | undefined): number {
   return port;
 }
 
-function readParentPid(raw: string | undefined): number | null {
-  if (raw === undefined || raw === "") return null;
-  const pid = Number(raw);
-  if (!Number.isInteger(pid) || pid <= 0) {
-    throw new Error(
-      `NOC_PARENT_PID must be a positive integer, received "${raw}"`,
-    );
-  }
-  return pid;
-}
-
 function readLogLevel(raw: string | undefined): LogLevel {
   if (raw === undefined || raw === "") return DEFAULT_LOG_LEVEL;
   if (!LOG_LEVELS.includes(raw as LogLevel)) {
@@ -66,9 +49,10 @@ function readLogLevel(raw: string | undefined): LogLevel {
 /**
  * Parses and validates config from an environment record.
  *
- * The defaults here serve the standalone dev server only. Under Tauri the shell
- * is the config authority: it resolves every value and passes it in the spawn
- * environment, so this function validates rather than decides.
+ * The defaults serve `bun run dev` and `bun run start`, where the project
+ * directory is the working directory and `rm -rf .noc-data` is a reset. An
+ * operator running the compiled binary from elsewhere sets `NOC_DATA_DIR`,
+ * which is why `databasePath` below resolves against an explicit base.
  *
  * `host` defaults to loopback on purpose: binding to 0.0.0.0 exposes the saved
  * layout and the internal URL list to the local network, so widening it has to
@@ -81,7 +65,6 @@ export function readConfig(env: Record<string, string | undefined>): NocConfig {
     dataDir: env.NOC_DATA_DIR || DEFAULT_DATA_DIR,
     dbFile: env.NOC_DB_FILE || DEFAULT_DB_FILE,
     logLevel: readLogLevel(env.NOC_LOG_LEVEL),
-    parentPid: readParentPid(env.NOC_PARENT_PID),
   };
 }
 

@@ -2,9 +2,8 @@
  * The handle between the two children of a split.
  *
  * It belongs to the layout layer and takes real space as a flex item between
- * the two slots. It is never an overlay over a pane: a native webview ignores
- * CSS clipping, so anything drawn on top of a pane disappears once the webview
- * renderer lands.
+ * the two slots rather than being an overlay over a pane, so it occupies the
+ * seam instead of covering someone's page.
  */
 
 import { useCallback, useEffect, useRef, type PointerEvent } from "react";
@@ -111,8 +110,8 @@ export function ResizeSplitter({
     // whose keydown never reaches this document — the drag would be uncancellable.
     element.focus({ preventScroll: true });
     // Pointer capture retargets the moves to this element. It is not enough on
-    // its own: a native webview takes input at the OS level and never honours
-    // it, which is what the suppressor below is for.
+    // its own: a cross-origin iframe swallows the pointer inside its own
+    // document, which is what the suppressor below is for.
     element.setPointerCapture(event.pointerId);
     sessionRef.current = beginResizeSession({
       splitId,

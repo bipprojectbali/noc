@@ -30,8 +30,7 @@
    find. Both matter because panes are placed in viewport coordinates by
    `geometry.sync`, which has no scroll listener — a document that moves drags
    every pane off its slot, which reads as "the whole page scrolls, the pane
-   does not". A native webview pane is a separate top-level document and never
-   chains here, so this governs the iframe renderer only. */
+   does not". */
 html,
 body,
 #root {
@@ -114,9 +113,8 @@ body {
   min-height: 0;
 }
 
-/* The splitter is a flex item between the two children, never an overlay over a
-   pane: a native webview ignores CSS clipping, so anything drawn on top of a
-   pane would be invisible once the webview renderer lands. */
+/* The splitter is a flex item between the two children rather than an overlay
+   over a pane, so it occupies the seam instead of covering someone's page. */
 .noc-splitter {
   flex: 0 0 var(--noc-splitter-size);
   background: var(--noc-border);
@@ -139,7 +137,7 @@ body {
 /* Set while a drag is in progress. See `resize.pointer-capture.ts`: this class
    is the iframe implementation of "no pane may take the cursor right now", and
    it is applied directly to <body> so that quieting the frames never re-renders
-   them. It does nothing for a native webview, which is not in the DOM. */
+   them. */
 body.noc-resizing {
   user-select: none;
 }

@@ -1,19 +1,11 @@
 /**
  * What a pane looks like while a drag is in flight.
  *
- * This is the one overlay in the codebase that is unconditionally safe, and for
- * a narrow reason: it only ever exists while a drag holds the pointer
- * suppressor, which hides every native webview. For that window there is no
- * OS-level view left to paint over, so the wall is pure DOM and an overlay
- * behaves. Outside that window it renders nothing at all.
- *
- * Which is also the problem it has to solve. A dragged-over wall shows its
- * webview panes as empty boxes while its iframe panes keep their page, and a
- * wall can hold both — so without help the gesture reads as half the screen
- * breaking. Every pane therefore gets a marked state for the duration: the one
+ * It exists only while a drag is in flight; outside that window it renders
+ * nothing at all. Every pane gets a marked state for the duration: the one
  * being carried, the one about to receive it with the landing area shaded, and
- * every other pane outlined and named by host. Naming them is what makes a
- * blanked webview pane identifiable rather than a hole.
+ * every other pane outlined and named by host — so the gesture reads as one
+ * move across the whole wall rather than an effect on two of its boxes.
  *
  * `pointer-events: none` throughout, or the overlay would be the thing
  * `elementFromPoint` finds and every drop would land on the pane it started

@@ -47,7 +47,6 @@ export function newPane(
     sites: [],
     activeSiteId: null,
     urlBarVisible: true,
-    strategy: "auto",
     createdAt: now,
   };
 }

@@ -22,9 +22,7 @@ export function resetWallStore(rootId: string): void {
  * The ids of the sites a pane holds, newest last.
  *
  * Site ids are minted at random, so a test that wants to talk about one asks
- * here rather than naming it. This is what the shell is addressed by: a webview
- * is one site's page, not one pane's, so `pane_webview_*` carries a site id in
- * the argument still spelled `paneId`.
+ * here rather than naming it.
  */
 export function siteIdsOf(paneId: string): string[] {
   const node = useWallStore.getState().tree.nodes[paneId];

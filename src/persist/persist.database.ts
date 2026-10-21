@@ -26,7 +26,7 @@ function readVersion(db: Database): number {
   return row?.version ?? 0;
 }
 
-/** Whether the table already carries the column, for steps that add one. */
+/** Whether the table already carries the column, for steps that move one. */
 function hasColumn(db: Database, table: string, column: string): boolean {
   return (
     db
@@ -42,12 +42,13 @@ function hasColumn(db: Database, table: string, column: string): boolean {
  * step, and returns the version it ended on. Replaying this is a no-op: the
  * version row gates the steps and every statement is guarded anyway.
  *
- * `addsColumn` is the one guard that cannot live in the statement, because
- * SQLite has no `ADD COLUMN IF NOT EXISTS` — see `persist.migrations`. The
- * whole step is skipped, not just the `ALTER`: a step is one transaction, so a
- * column that exists is proof its step committed, whatever the version row has
- * since been rewound to. The stamp below still runs, which is what puts the
- * file back in agreement with itself.
+ * `addsColumn` and `dropsColumn` are the guards that cannot live in the
+ * statement, because SQLite has neither `ADD COLUMN IF NOT EXISTS` nor a drop
+ * that works on a `CHECK`-constrained column — see `persist.migrations`. The
+ * whole step is skipped, not just its DDL: a step is one transaction, so the
+ * column being where that step would have put it is proof the step committed,
+ * whatever the version row has since been rewound to. The stamp below still
+ * runs, which is what puts the file back in agreement with itself.
  */
 export function migrate(db: Database, now: number): number {
   db.run(SCHEMA_VERSION_DDL);
@@ -56,8 +57,10 @@ export function migrate(db: Database, now: number): number {
   for (const step of MIGRATIONS) {
     if (step.version <= version) continue;
     const applied =
-      step.addsColumn !== undefined &&
-      hasColumn(db, step.addsColumn.table, step.addsColumn.column);
+      (step.addsColumn !== undefined &&
+        hasColumn(db, step.addsColumn.table, step.addsColumn.column)) ||
+      (step.dropsColumn !== undefined &&
+        !hasColumn(db, step.dropsColumn.table, step.dropsColumn.column));
     db.transaction(() => {
       if (!applied) for (const statement of step.statements) db.run(statement);
       db.run(

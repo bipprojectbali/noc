@@ -10,8 +10,9 @@ import { DEFAULT_ZOOM, isZoomLevel } from "./layout.zoom.ts";
  *
  * 1 → 2: a pane's single `url` became a list of sites with one of them active.
  * 2 → 3: every site carries how much its page is magnified.
+ * 3 → 4: a pane no longer chooses a renderer; `strategy` is read and dropped.
  */
-export const CURRENT_LAYOUT_VERSION = 3;
+export const CURRENT_LAYOUT_VERSION = 4;
 
 export type SerializedLayout = {
   version: number;
@@ -80,10 +81,32 @@ function migrateSitesAddZoom(tree: unknown): unknown {
   return { ...candidate, nodes };
 }
 
+/**
+ * Drops the renderer each pane used to pick. Read and discarded, never
+ * rejected: a wall saved while that choice existed must still open, and the
+ * only renderer left is the one `strategy: "iframe"` named anyway. Dropping it
+ * here rather than leaving it on the node keeps a restored tree equal to a
+ * fresh one, which is what the invariant checks and the row writer assume.
+ */
+function migratePaneDropStrategy(tree: unknown): unknown {
+  const candidate = tree as { nodes?: Record<string, Record<string, unknown>> };
+  const nodes: Record<string, unknown> = {};
+  for (const [id, node] of Object.entries(candidate.nodes ?? {})) {
+    if (node.kind !== "pane") {
+      nodes[id] = node;
+      continue;
+    }
+    const { strategy: _dropped, ...rest } = node;
+    nodes[id] = rest;
+  }
+  return { ...candidate, nodes };
+}
+
 /** One entry per upgrade step, keyed by the version it reads. */
 const MIGRATIONS: Record<number, (tree: unknown) => unknown> = {
   1: migratePaneUrlToSites,
   2: migrateSitesAddZoom,
+  3: migratePaneDropStrategy,
 };
 
 export function serializeLayout(tree: LayoutTree): SerializedLayout {

@@ -6,11 +6,8 @@
  * identical in a screenshot and be useless in practice: every switch would cost
  * a reload, a scroll position and, on a logged-in dashboard, a session.
  *
- * So the iframe tests compare element identity across a switch, and the native
- * test watches the shell: a webview is not in the DOM, so the only evidence it
- * survived is that `pane_webview_close` was never sent. The native shell is
- * faked at the seam `isNativeHost` sniffs, keeping the real bridge, the real
- * singleton renderer and the real store in the test.
+ * So the test compares element identity across a switch: the same node, still
+ * pointed at the same address, is the only evidence the page was never rebuilt.
  *
  * happy-dom measures every element as zero and loads no stylesheet, so nothing
  * here says anything about whether the pips fit or can be seen. That is on the
@@ -18,16 +15,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { PaneFrame } from "../../src/pane/pane.frame.tsx";
 import { MAX_INLINE_SITE_PIPS } from "../../src/pane/pane.site-switcher.tsx";
 import { useWallStore } from "../../src/pane/pane.store.ts";
-import { paneWebviewRenderer } from "../../src/pane/pane.webview-renderer.ts";
-import { stubRect } from "../fixtures/dom-rect.ts";
 import { resetWallStore, settleAsyncWork, siteIdsOf } from "../fixtures/wall-store.ts";
 
-const WAIT = { timeout: 2000 };
 const PANE = "w1";
 const realFetch = globalThis.fetch;
 
@@ -43,8 +37,6 @@ beforeEach(() => {
 afterEach(async () => {
   await settleAsyncWork();
   cleanup();
-  delete (globalThis.window as unknown as Record<string, unknown>)
-    .__TAURI_INTERNALS__;
   globalThis.fetch = realFetch;
 });
 
@@ -179,117 +171,5 @@ describe("the ⋮ panel names the pages and is the only way to add one", () => {
     expect(frameOf(siteIdsOf(PANE)[1]!).getAttribute("src")).toBe(
       "https://added.example/",
     );
-  });
-});
-
-type InvokeCall = { cmd: string; paneId: unknown; visible: unknown };
-
-let invokeCalls: InvokeCall[] = [];
-
-function enterNativeHost(): void {
-  invokeCalls = [];
-  (globalThis.window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
-    invoke: (cmd: string, args: { paneId?: unknown; visible?: unknown }) => {
-      invokeCalls.push({ cmd, paneId: args?.paneId, visible: args?.visible });
-      return Promise.resolve();
-    },
-  };
-}
-
-/**
- * Stands in for `syncPaneGeometry`: gives every site's anchor a rect and tells
- * the renderer the pane is on screen, which is the only way a webview is ever
- * sent `visible: true`.
- */
-async function placePane(siteIds: string[]): Promise<void> {
-  for (const siteId of siteIds) {
-    stubRect(frameOf(siteId), { left: 0, top: 0, width: 400, height: 300 });
-  }
-  paneWebviewRenderer.place(PANE, true);
-  await settleAsyncWork();
-}
-
-function visibilityOf(siteId: string): boolean | undefined {
-  return invokeCalls
-    .filter((call) => call.cmd === "pane_webview_place" && call.paneId === siteId)
-    .at(-1)?.visible as boolean | undefined;
-}
-
-/** What the last `pane_webview_show` for this site asked to be on screen. */
-function openVisibilityOf(siteId: string): boolean | undefined {
-  return invokeCalls
-    .filter((call) => call.cmd === "pane_webview_show" && call.paneId === siteId)
-    .at(-1)?.visible as boolean | undefined;
-}
-
-describe("switching sites in the native shell never destroys a webview", () => {
-  test("both pages are opened, and the switch only changes which is visible", async () => {
-    enterNativeHost();
-    render(<PaneFrame paneId={PANE} />);
-    const [first, second] = await giveSites(2);
-
-    // One webview per page, each labelled by its site.
-    await waitFor(() => {
-      const opened = invokeCalls
-        .filter((call) => call.cmd === "pane_webview_show")
-        .map((call) => call.paneId);
-      expect(opened).toContain(first!);
-      expect(opened).toContain(second!);
-    }, WAIT);
-
-    // What the layout would do: the pane is on screen and has a rect. Supplied
-    // because happy-dom measures everything as zero, and a webview with no area
-    // is kept hidden on purpose.
-    await placePane([first!, second!]);
-
-    await act(async () => {
-      useWallStore.getState().activateSite(PANE, first!);
-    });
-    await settleAsyncWork();
-
-    expect(visibilityOf(first!)).toBe(true);
-    expect(visibilityOf(second!)).toBe(false);
-    // The point of the whole design: the page being left is hidden, not closed.
-    // Closing it would reload it on the way back and lose its session.
-    expect(invokeCalls.map((call) => call.cmd)).not.toContain("pane_webview_close");
-  });
-
-  /**
-   * A reload re-opens every page the pane holds, which is also what a reload of
-   * the wall page itself does: the shell still owns the webviews, and the page
-   * that just came back hands them their addresses again. Opening used to mean
-   * showing, so each background page painted over the active one until the
-   * correcting `place` landed an IPC round-trip later.
-   */
-  test("a page kept warm behind its sibling is never asked to be shown", async () => {
-    enterNativeHost();
-    render(<PaneFrame paneId={PANE} />);
-    const [first, second] = await giveSites(2);
-    await placePane([first!, second!]);
-
-    await act(async () => {
-      useWallStore.getState().reloadPane(PANE);
-    });
-    await settleAsyncWork();
-
-    // `giveSites` leaves the last page active, so `first` is the one behind.
-    expect(openVisibilityOf(first!)).toBe(false);
-    expect(openVisibilityOf(second!)).toBe(true);
-  });
-
-  test("removing a page is the one switch-adjacent thing that does close it", async () => {
-    enterNativeHost();
-    render(<PaneFrame paneId={PANE} />);
-    const [, second] = await giveSites(2);
-
-    await act(async () => {
-      useWallStore.getState().removeSite(PANE, second!);
-    });
-    await settleAsyncWork();
-
-    const closed = invokeCalls
-      .filter((call) => call.cmd === "pane_webview_close")
-      .map((call) => call.paneId);
-    expect(closed).toEqual([second!]);
   });
 });

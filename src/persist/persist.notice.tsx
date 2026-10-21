@@ -1,9 +1,8 @@
 import { useWallStore } from "../pane/pane.store.ts";
 
 /**
- * Says so when the wall is not saving. Rendered above the wall, never over it:
- * a native webview ignores CSS clipping, so a message drawn on a pane would be
- * hidden behind that pane's webview.
+ * Says so when the wall is not saving. Rendered above the wall rather than over
+ * it, so the message never covers the page a pane is showing.
  */
 export function PersistenceNotice() {
   const status = useWallStore((state) => state.persistence);

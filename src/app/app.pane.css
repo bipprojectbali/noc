@@ -1,10 +1,8 @@
 /* Layer 2 of 3, imported after `app.base.css` and before `app.drag.css`. The
    pane itself, from the host box down: the pane layer, the floating chrome
    (⋮ and the site pips), the menu panel and every row in it, the zoom control,
-   and the two renderers' content boxes — iframe and webview anchor. It reads
-   the custom properties defined in layer 1, which is why it cannot come first.
-   Nothing here may be reordered against layer 3: `body.noc-no-pane-cursor`
-   there targets `.noc-pane-host` defined here. */
+   and the iframe that holds a site. It reads the custom properties defined in
+   layer 1, which is why it cannot come first. */
 
 /* Pane layer: above the slots, never reordered, placed imperatively. */
 .noc-pane-layer {
@@ -31,9 +29,7 @@
   z-index: 1;
 }
 
-/* `relative` so the menu panel can be positioned against the pane. The panel is
-   the single exception to "chrome is never an overlay", and it pays for it by
-   hiding every native webview for as long as it is open — see `pane.menu`. */
+/* `relative` so the menu panel can be positioned against the pane. */
 .noc-pane {
   position: relative;
   display: flex;
@@ -54,13 +50,7 @@
    at all and hands it back only to the parts that are really there. The page
    loses the button's 24px and nothing else. The cost is that right-click lands
    on the chrome only over the button itself; the padding belongs to the page
-   again.
-
-   One shape for both renderers. It is invisible over a native webview, which
-   paints above the whole web layer, and that is handled a layer down instead:
-   the shell parks a 40px chrome webview in this same corner with the same 24px
-   button inset 8px, so when every webview hides for a drag or an open menu this
-   one takes over without moving. `server.chrome-page.ts` holds the copy. */
+   again. */
 .noc-pane__chrome {
   position: absolute;
   top: 0;
@@ -121,9 +111,7 @@
 }
 
 /* Which of the pane's pages is on screen, and the way to change it without
-   opening anything. It sits in the same chrome box as ⋮ and therefore takes
-   the same two shapes, which is the point: one more floating thing over a
-   native webview would not be visible at all.
+   opening anything. It sits in the same chrome box as ⋮.
 
    Widths are a budget, not a measurement — no test loads this file. The
    narrowest pane the wall will make is `MIN_FRACTION` 0.05, about 96px on a
@@ -294,8 +282,7 @@
 
 /* A row the host cannot offer: dimmed to the muted colour and inert, kept in
    place rather than removed, so the menu reads the same everywhere and the
-   note under it can say why. Same treatment the renderer picker gives its
-   webview option in a browser. */
+   note under it can say why. */
 .noc-pane__menu-item:disabled {
   color: var(--noc-muted);
   background: none;
@@ -448,12 +435,3 @@ body.noc-resizing .noc-pane__menu {
   visibility: hidden;
 }
 
-/* Empty on purpose. A native webview is not in the DOM: this box exists only to
-   be measured, and the webview is placed over it in window coordinates. It is
-   dark rather than transparent so the pane does not flash the wall background
-   while the webview is hidden. */
-.noc-pane__webview-anchor {
-  width: 100%;
-  height: 100%;
-  background: var(--noc-bg);
-}

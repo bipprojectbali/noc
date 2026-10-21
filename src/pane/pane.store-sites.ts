@@ -13,7 +13,7 @@
  *   `addressed`, which validates once; adding a site and repointing one differ
  *   by a flag, not by a second copy of the same code.
  * - Switching sites is a tree write and nothing else. No probe, no reload, no
- *   close: the renderers hide the page being left and keep it running, which is
+ *   close: the renderer hides the page being left and keeps it running, which is
  *   the whole reason a pane can hold several.
  */
 
@@ -41,10 +41,8 @@ import {
 } from "./pane.load-state.ts";
 import { makeId, nextCreatedAt } from "./pane.ids.ts";
 import { fetchEmbeddability } from "./pane.probe-client.ts";
-import { paneRendererFor, releaseSite } from "./pane.renderer.ts";
 import type { WallState } from "./pane.store.ts";
 import { normalizePaneUrl } from "./pane.url.ts";
-import { paneWebviewRenderer } from "./pane.webview-renderer.ts";
 
 type SetWall = StoreApi<WallState>["setState"];
 type GetWall = StoreApi<WallState>["getState"];
@@ -81,28 +79,8 @@ export type WallSitesSlice = Pick<
 >;
 
 export function createWallSitesSlice(set: SetWall, get: GetWall): WallSitesSlice {
-  /** The renderer a pane will really get, for the decisions the store makes. */
-  const rendersAsWebview = (paneId: PaneId): boolean => {
-    const node = get().tree.nodes[paneId];
-    if (node === undefined || !isPane(node)) return false;
-    return paneRendererFor(node.strategy).kind === "webview";
-  };
-
   /** Probes in the background; a result for a stale url is dropped by the reducer. */
-  const probe = (siteId: SiteId, paneId: PaneId, url: string): void => {
-    // A native webview loads a top-level document, so no framing header can
-    // refuse it and the fetch would be one nobody reads. The site still has to
-    // leave `probing`, and "unknown" is already the verdict meaning "go ahead".
-    if (rendersAsWebview(paneId)) {
-      get().dispatchLoad(siteId, {
-        type: "probe-settled",
-        url,
-        verdict: "unknown",
-        reason: "native webview: framing headers do not apply",
-      });
-      return;
-    }
-
+  const probe = (siteId: SiteId, url: string): void => {
     void fetchEmbeddability(url)
       .then((result) => {
         get().dispatchLoad(siteId, {
@@ -155,7 +133,7 @@ export function createWallSitesSlice(set: SetWall, get: GetWall): WallSitesSlice
         }),
       },
     }));
-    probe(siteId, paneId, result.url);
+    probe(siteId, result.url);
   };
 
   /** Closes one of a pane's pages for good. The pane stays, even at zero sites. */
@@ -165,10 +143,8 @@ export function createWallSitesSlice(set: SetWall, get: GetWall): WallSitesSlice
       if (pane === undefined || !isPane(pane)) return {};
       if (!pane.sites.some((site) => site.id === siteId)) return {};
       const { [siteId]: _dropped, ...load } = state.load;
-      // This and deleting the pane are the only places a page is meant to die.
-      // A native webview is not in the DOM, so React cannot take it down with
-      // the element; switching sites must never come through here.
-      releaseSite(siteId);
+      // This and deleting the pane are the only places a page is meant to die;
+      // switching sites must never come through here.
       return { tree: removeSiteFromTree(state.tree, paneId, siteId), load };
     });
   };
@@ -190,7 +166,7 @@ export function createWallSitesSlice(set: SetWall, get: GetWall): WallSitesSlice
       // The tree is the whole input: it already carries every site's url, which
       // is why `persist.sync` no longer seeds load state per pane.
       const load: Record<SiteId, PaneLoadState> = {};
-      const pending: { paneId: PaneId; siteId: SiteId; url: string }[] = [];
+      const pending: { siteId: SiteId; url: string }[] = [];
       for (const node of Object.values(tree.nodes)) {
         if (!isPane(node)) continue;
         for (const site of node.sites) {
@@ -198,11 +174,11 @@ export function createWallSitesSlice(set: SetWall, get: GetWall): WallSitesSlice
           // was stored: framing permission comes from the target's live
           // response headers, and yesterday's answer is not evidence.
           load[site.id] = { kind: "probing", url: site.url };
-          pending.push({ paneId: node.id, siteId: site.id, url: site.url });
+          pending.push({ siteId: site.id, url: site.url });
         }
       }
       set({ tree, load, urlError: {} });
-      for (const item of pending) probe(item.siteId, item.paneId, item.url);
+      for (const item of pending) probe(item.siteId, item.url);
     },
 
     submitUrl: (paneId, raw) => addressed(paneId, raw, false),
@@ -239,17 +215,15 @@ export function createWallSitesSlice(set: SetWall, get: GetWall): WallSitesSlice
       const pane = get().tree.nodes[paneId];
       if (pane === undefined || !isPane(pane)) return;
       // Every site of the pane, not only the one on screen. The background
-      // pages are live documents, and both callers mean the whole pane: the ⋮
-      // item, and a cookie import that only takes effect on a fresh load.
+      // pages are live documents, and the ⋮ item that calls this means the
+      // whole pane.
       for (const site of pane.sites) {
         const before = siteLoadState(get(), site.id);
         if (before.kind === "empty") continue;
         get().dispatchLoad(site.id, { type: "reload" });
-        probe(site.id, paneId, before.url);
-        // An iframe reloads on its own: `probing` takes its `src` away and the
-        // next state puts it back. A webview keeps the same url throughout, so
-        // nothing navigates unless it is told to.
-        if (rendersAsWebview(paneId)) paneWebviewRenderer.reopen(site.id);
+        // The iframe reloads on its own: `probing` takes its `src` away and the
+        // next state puts it back.
+        probe(site.id, before.url);
       }
     },
 

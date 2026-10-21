@@ -7,11 +7,13 @@
  * layout instead of being trusted because it came from our own database.
  *
  * Two pane columns are legacy, and both are left out of the INSERT so nothing
- * here writes them again. Neither is dropped, because dropping a column in
- * SQLite means rebuilding the table:
+ * here writes them again. Schema 4 rebuilt `panes` to drop `strategy` and
+ * carried these two across unchanged, which is deliberate: one is still read,
+ * and a column nobody writes costs nothing to keep.
  *
  * - `home_url`: addresses live in `pane_sites` since schema 2, and its only
- *   remaining reader is that step's one-shot backfill.
+ *   remaining reader is that step's one-shot backfill — which still has to
+ *   work for a database that has never been opened since.
  * - `current_url`: meant for a page a pane had navigated to by itself, which
  *   never differed from the site's own url — we only ever learn the `src` we
  *   set. Rows written before this still hold a value; nobody reads it.
@@ -26,7 +28,6 @@ import {
   type PaneId,
   type PaneNode,
   type PaneSite,
-  type PaneStrategy,
   type SiteId,
   type SplitDirection,
   type SplitNode,
@@ -38,21 +39,21 @@ import type { WallSnapshot } from "./persist.types.ts";
 export type StoredLayout = Omit<WallSnapshot, "settings">;
 
 /**
- * The tree shape these rows express. Since schema 3 that is version 3: a pane's
+ * The tree shape these rows express. Since schema 4 that is version 4: a pane's
  * sites each have a row, in order, with one of them flagged active and each one
- * carrying how much its page is magnified. The `layouts.layout_version` column
- * records the version the rows were written at, and the schema step that moved
- * them forward re-stamped it — so a read never runs a tree migration over rows
- * that have already had it applied.
+ * carrying how much its page is magnified, and a pane no longer names a
+ * renderer. The `layouts.layout_version` column records the version the rows
+ * were written at, and the schema step that moved them forward re-stamped it —
+ * so a read never runs a tree migration over rows that have already had it
+ * applied.
  */
-const ROW_TREE_VERSION = 3;
+const ROW_TREE_VERSION = 4;
 
 type LayoutRow = { root_id: string; layout_version: number };
 type PaneRow = {
   id: string;
   parent_id: string | null;
   url_bar_visible: number;
-  strategy: string;
   created_at: number;
 };
 type PaneSiteRow = {
@@ -121,7 +122,7 @@ export function readLayout(db: Database, layoutId: string): StoredLayout | null 
 
   for (const row of db
     .query<PaneRow, [string]>(
-      `SELECT id, parent_id, url_bar_visible, strategy, created_at
+      `SELECT id, parent_id, url_bar_visible, created_at
        FROM panes WHERE layout_id = ? ORDER BY created_at`,
     )
     .all(layoutId)) {
@@ -135,9 +136,6 @@ export function readLayout(db: Database, layoutId: string): StoredLayout | null 
       // reports that below, and a quiet fallback would hide a damaged file.
       activeSiteId: held?.activeSiteId ?? null,
       urlBarVisible: row.url_bar_visible === 1,
-      // Constrained by a CHECK on the column, so the stored value is always one
-      // of the three the type allows.
-      strategy: row.strategy as PaneStrategy,
       createdAt: row.created_at,
     };
   }
@@ -201,9 +199,8 @@ export function writeLayout(
   // address into either legacy column would invite a future reader to treat it
   // as the truth, and `pane_sites` is the truth.
   const insertPane = db.query(
-    `INSERT INTO panes (id, layout_id, parent_id,
-                        url_bar_visible, strategy, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO panes (id, layout_id, parent_id, url_bar_visible, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
   );
   const insertSite = db.query(
     `INSERT INTO pane_sites (layout_id, pane_id, site_id, position, url,
@@ -223,7 +220,6 @@ export function writeLayout(
         layoutId,
         node.parentId,
         node.urlBarVisible ? 1 : 0,
-        node.strategy,
         node.createdAt,
       );
       // The array index is the position, so the list comes back as held.

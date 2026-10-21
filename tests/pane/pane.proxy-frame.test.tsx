@@ -97,8 +97,9 @@ describe("a wall served from its own proxy host", () => {
 
 describe("a wall reached some other way", () => {
   test("a loopback wall frames the typed url unchanged", async () => {
-    // Where the proxy cannot work, nothing about the pane changes. This is the
-    // address Tauri loads, so it is also the native shell's case.
+    // Where the proxy cannot work, nothing about the pane changes. A wall
+    // typed as `127.0.0.1` is normally moved to the proxy host; this is the
+    // case where it was told to stay, and the pane still has to work.
     setWallUrl("http://127.0.0.1:7788/");
     await showSite();
     await waitFor(() => {

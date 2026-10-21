@@ -18,14 +18,7 @@ import {
   handleCookieDemoRead,
   handleCookieDemoSet,
 } from "./cookie.demo.ts";
-import { PANE_CHROME_PATH, handlePaneChrome } from "./server.chrome-page.ts";
-import {
-  WALL_SHELL_PATH,
-  createHostDispatch,
-  stayOnHostUrl,
-} from "./server.host-dispatch.ts";
-import { watchParentProcess } from "./server.parent-watch.ts";
-import { readyLine } from "./server.ready.ts";
+import { WALL_SHELL_PATH, createHostDispatch } from "./server.host-dispatch.ts";
 import {
   EMBEDDABILITY_PATH,
   SELF_TEST_PATH,
@@ -76,9 +69,6 @@ try {
         createEmbeddabilityHandler({ registry: proxySiteRegistry }),
       ),
       [SELF_TEST_PATH]: wallOnly(handleSelfTest),
-      // Before the catch-all below, which is the wall page itself: this one is
-      // loaded by the shell into a 40px child webview, not by a browser.
-      [PANE_CHROME_PATH]: wallOnly(handlePaneChrome),
       // Framable on purpose: the demo only says anything when the wall frames
       // it from the other loopback host. See `cookie.demo-page.ts`. `wallOnly`
       // does not change that — it only keeps these paths off a proxied site,
@@ -119,18 +109,3 @@ console.info(
   `A browser is sent on to http://${WALL_PROXY_HOSTNAME}:${server.port}/ ` +
     `so panes can hold a session.`,
 );
-// Machine-readable, and only after the socket is bound: whoever spawned this
-// process may be waiting on it to learn the ephemeral port. Marked to stay put
-// — the native shell is the one client that must not be redirected, and this is
-// the channel by which the server, not a string match, tells it apart.
-console.info(readyLine(stayOnHostUrl(server.url.href)));
-
-if (config.parentPid !== null) {
-  watchParentProcess({
-    parentPid: config.parentPid,
-    onOrphaned: (pid) => {
-      console.warn(`Parent process ${pid} is gone, shutting down.`);
-      void server.stop(true).finally(() => process.exit(0));
-    },
-  });
-}

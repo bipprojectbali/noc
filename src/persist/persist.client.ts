@@ -1,8 +1,8 @@
 /**
  * Browser side of the storage seam: a `WallPersistPort` backed by HTTP.
  *
- * Nothing here knows the server keeps a SQLite file; swapping in a native
- * webview host or a remote service means replacing this file only. Writes go
+ * Nothing here knows the server keeps a SQLite file; swapping in browser
+ * storage or a remote service means replacing this file only. Writes go
  * through the coalescing writer, which is what keeps a splitter drag from
  * turning into one request per animation frame.
  */

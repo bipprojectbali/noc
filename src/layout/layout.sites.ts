@@ -12,8 +12,8 @@
  * here may do anything else to the order.
  *
  * Site ids are unique across the whole wall rather than per pane, so per-site
- * state — load state, a native webview label — can be keyed on the site id
- * alone. That is also what keeps `pane.load-state` keyed as it is today.
+ * state — load state, zoom — can be keyed on the site id alone. That is also
+ * what keeps `pane.load-state` keyed as it is today.
  *
  * Unknown pane or site ids throw. A caller holding a stale id is a bug, not a
  * gesture a user can make; refusals are for things a drag or a click can

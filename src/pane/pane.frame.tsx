@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { isNativeHost } from "../native/native.bridge.ts";
-import { isPane, type PaneId, type PaneSite } from "../layout/layout.types.ts";
+import { isPane, type PaneId } from "../layout/layout.types.ts";
 import { DEFAULT_ZOOM } from "../layout/layout.zoom.ts";
-import { usePaneChrome } from "./pane.chrome-channel.ts";
 import { PaneCookieNotice } from "./pane.cookie-notice.tsx";
+import { PaneIframe } from "./pane.iframe-renderer.tsx";
 import { INITIAL_PANE_LOAD_STATE, type PaneLoadState } from "./pane.load-state.ts";
 import { PaneMenu } from "./pane.menu.tsx";
-import { paneRendererFor } from "./pane.renderer.ts";
 import { useWallStore } from "./pane.store.ts";
 import { urlHostLabel } from "./pane.url.ts";
 
@@ -16,8 +14,6 @@ export type PaneFrameProps = { paneId: PaneId };
 
 /** Stable identity, so the shallow compare below is not defeated by it. */
 const NO_SITES: readonly PaneLoadState[] = [];
-/** Same, for a pane the tree no longer holds. */
-const NO_PANE_SITES: readonly PaneSite[] = [];
 
 /**
  * One pane: its chrome and its content.
@@ -28,15 +24,9 @@ const NO_PANE_SITES: readonly PaneSite[] = [];
  * unmounting it, or moving it to a different parent in the DOM, reloads the
  * page and discards everything it holds.
  *
- * The chrome floats over that content in both renderers, and no pane spends any
- * height on it. Over an iframe the floating chrome is simply visible. Over a
- * native webview it is not — the webview is an OS-level view that paints above
- * the entire web layer — so the shell parks an 88x40 chrome webview in the same
- * corner, carrying the same ⋮ and the same pips, and its clicks arrive here over
- * `pane.chrome-channel`. That is what let the 20px seam a webview pane used to
- * reserve go away. Both ⋮ open this one `menuOpen`, and the moment it is open
- * every webview hides, so the DOM chrome the native one stands in for is back
- * in its place.
+ * The chrome floats over that content and no pane spends any height on it: a
+ * reserved strip is what made the wall read as a grid of boxes rather than one
+ * surface.
  *
  * Whether the menu is open lives here rather than in `pane.menu`, because the
  * empty-pane message opens it too: right-click reaches only the surfaces this
@@ -67,21 +57,6 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
   const reloadPane = useWallStore((state) => state.reloadPane);
   const splitPane = useWallStore((state) => state.splitPane);
   const deletePane = useWallStore((state) => state.deletePane);
-  const setPaneStrategy = useWallStore((state) => state.setPaneStrategy);
-
-  // The chrome the shell draws over this pane's webview, in both directions:
-  // its clicks come back here, and it is told which pages the pane holds so its
-  // pips can say which one is showing. It only ever names sites, never panes —
-  // the shell has no idea a pane holds several — so the list below is both the
-  // message and the filter. Before the early return, because a hook cannot be
-  // conditional, which is why the pane is read defensively here.
-  const pane = node !== undefined && isPane(node) ? node : null;
-  usePaneChrome({
-    sites: pane?.sites ?? NO_PANE_SITES,
-    activeId: pane?.activeSiteId ?? null,
-    onOpenMenu: () => setMenuOpen(true),
-    onActivate: (siteId) => activateSite(paneId, siteId),
-  });
 
   if (node === undefined || !isPane(node)) {
     return <div className="noc-error">Pane {paneId} is not in the layout.</div>;
@@ -93,14 +68,6 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
   // The chrome asks about the page on screen. The pane's other pages are
   // loaded and hidden, and nothing above here asks about them collectively.
   const load = loads[activeIndex] ?? INITIAL_PANE_LOAD_STATE;
-  const renderer = paneRendererFor(node.strategy);
-  // Framing permission is an iframe problem. A native webview is a top-level
-  // document, so reporting a refusal there would be reporting a limit that does
-  // not exist for this pane.
-  const framingApplies = renderer.kind === "iframe";
-  // The renderer that escapes framing is a native view: in a browser there is
-  // nothing to switch to, and saying so beats offering a way out that is not one.
-  const nativeHost = isNativeHost();
 
   return (
     <section className="noc-pane" data-pane-id={paneId}>
@@ -120,14 +87,11 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
           // whatever they were set to, which is the point of storing this per
           // site. An empty pane has nothing to magnify and says so with null.
           level: activeSite?.zoom ?? null,
-          applies: renderer.kind === "iframe",
           set: (level) => {
             if (activeSite !== undefined) setSiteZoom(paneId, activeSite.id, level);
           },
         }}
         error={error}
-        strategy={node.strategy}
-        nativeHost={nativeHost}
         open={menuOpen}
         onOpenChange={setMenuOpen}
         onSubmit={(raw) => {
@@ -141,7 +105,6 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
           reloadPane(paneId);
           setMenuOpen(false);
         }}
-        onStrategyChange={(strategy) => setPaneStrategy(paneId, strategy)}
         onSplit={(direction) => {
           splitPane(paneId, direction);
           setMenuOpen(false);
@@ -157,7 +120,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
             sites still mounts one, keyed by the pane, so the renderer has
             somewhere to put the empty-pane case. */}
         {node.sites.length === 0 ? (
-          <renderer.Content
+          <PaneIframe
             paneId={paneId}
             siteId={paneId}
             url={null}
@@ -167,7 +130,7 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
           />
         ) : (
           node.sites.map((site, index) => (
-            <renderer.Content
+            <PaneIframe
               key={site.id}
               paneId={paneId}
               siteId={site.id}
@@ -192,21 +155,15 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
           </p>
         )}
 
-        {/* Same boundary as the refusal below: a native webview is a top-level
-            document, so neither framing headers nor `SameSite` reach it. */}
-        {framingApplies && (load.kind === "loading" || load.kind === "ready") && (
-          <PaneCookieNotice
-            paneId={paneId}
-            decision={load.cookies}
-            nativeHost={nativeHost}
-          />
+        {(load.kind === "loading" || load.kind === "ready") && (
+          <PaneCookieNotice paneId={paneId} decision={load.cookies} />
         )}
 
-        {load.kind === "probing" && framingApplies && (
+        {load.kind === "probing" && (
           <p className="noc-pane__status">Checking whether {load.url} can be framed…</p>
         )}
 
-        {load.kind === "refused" && framingApplies && (
+        {load.kind === "refused" && (
           <div
             className="noc-pane__status noc-pane__status--refused"
             role="status"
@@ -215,10 +172,15 @@ export function PaneFrame({ paneId }: PaneFrameProps) {
             <div>
               <strong>{urlHostLabel(load.url)} refuses to be framed.</strong>
               <div className="noc-pane__reason">{load.reason}</div>
+              {/* This can only be seen on a wall opened at an address that
+                  cannot proxy — `127.0.0.1`. On the wall's own proxy host the
+                  site is served from a sibling subdomain, which strips the
+                  refusal, and `/api/embeddability` answers "unknown" rather
+                  than claiming a refusal that will not happen. */}
               <div className="noc-pane__reason">
-                {nativeHost
-                  ? "Allow this origin in the target's own headers, or set this pane's renderer to Webview in its ⋮ menu — a native webview is a top-level document, and the switch reloads the page."
-                  : "Allow this origin in the target's own headers. The renderer this cannot refuse is a native webview, and that exists only in the desktop app."}
+                Open this wall at its own hostname, where the site is served
+                same-site and framing headers no longer apply, or allow this
+                origin in the target's own headers.
               </div>
             </div>
           </div>

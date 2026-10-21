@@ -2,18 +2,11 @@
  * Switching between the pages one pane holds, without opening a menu.
  *
  * A pane that holds several sites needs its switch on the pane, not two clicks
- * deep: cycling dashboards is the gesture the feature exists for, and the ⋮
- * panel blanks every native webview on the wall while it is open.
+ * deep: cycling dashboards is the gesture the feature exists for.
  *
  * It takes the **same shape as ⋮ and for the same reason** — it floats over the
- * pane's top-right corner under either renderer — which is why it is rendered by
- * `pane.menu` inside that one chrome container rather than owning a box of its
- * own. Over a native child webview nothing the web layer draws is visible at all
- * (invariant 3), so what the user sees there is the shell's stand-in: the chrome
- * webview in `server.chrome-page.ts` draws these same pips from the list this
- * pane sends it over `pane.chrome-channel`. Two renderings of one control, which
- * is the price of the corner no longer costing the page a 20px row — and the
- * reason the geometry here is a contract, not a preference.
+ * pane's top-right corner — which is why it is rendered by `pane.menu` inside
+ * that one chrome container rather than owning a box of its own.
  *
  * Two forms, because a pane can be ~96px wide (`MIN_FRACTION` 0.05 of a 1920
  * wall) and the chrome also has to hold ⋮:

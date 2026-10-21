@@ -23,12 +23,6 @@ export function sideIsLeading(side: PaneSide): boolean {
 }
 
 /**
- * Which renderer serves a pane. Resolved per pane because the wall mixes
- * internal dashboards (plain iframe) with sites that refuse framing.
- */
-export type PaneStrategy = "auto" | "iframe" | "webview";
-
-/**
  * Identifies one address inside a pane. Unique across the whole wall, not per
  * pane, so anything keyed by site needs no pane id beside it. Alnum, `-` and
  * `_` only: Rust's `pane_label` rejects anything else.
@@ -58,7 +52,6 @@ export type PaneNode = {
   /** Which site is on screen. `null` exactly when `sites` is empty. */
   activeSiteId: SiteId | null;
   urlBarVisible: boolean;
-  strategy: PaneStrategy;
   /** Creation order. Keeps the flat pane layer in a stable order forever. */
   createdAt: number;
 };

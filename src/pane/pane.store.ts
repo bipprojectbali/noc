@@ -14,7 +14,6 @@ import { geometryRegistry } from "../geometry/geometry.store.ts";
 import {
   createTree,
   resizeSplit,
-  setPaneStrategy,
   setPaneUrlBarVisible,
   splitPane,
 } from "../layout/layout.tree.ts";
@@ -29,7 +28,6 @@ import {
   type LayoutTree,
   type NodeId,
   type PaneId,
-  type PaneStrategy,
   type SiteId,
   type SplitDirection,
 } from "../layout/layout.types.ts";
@@ -37,7 +35,6 @@ import type { PaneLoadEvent, PaneLoadState } from "./pane.load-state.ts";
 import type { PersistenceStatus } from "../persist/persist.status.ts";
 import type { DropZone } from "./pane.drag-geometry.ts";
 import { makeId, nextCreatedAt } from "./pane.ids.ts";
-import { releasePane, rendererChange } from "./pane.renderer.ts";
 import { createWallSitesSlice } from "./pane.store-sites.ts";
 
 export type WallState = {
@@ -80,19 +77,14 @@ export type WallState = {
    * and a settings key, so dropping it is a schema migration, not a delete.
    */
   setUrlBarVisible: (paneId: PaneId, visible: boolean) => void;
-  /**
-   * Switches which renderer serves a pane. Replaces the pane's content, so the
-   * sites in it reload; the control that calls this says so.
-   */
-  setPaneStrategy: (paneId: PaneId, strategy: PaneStrategy) => void;
   dispatchLoad: (siteId: SiteId, event: PaneLoadEvent) => void;
   splitPane: (paneId: PaneId, direction: SplitDirection) => void;
   /**
    * Lands a finished pane drag: an edge drops the pane on that side of the
    * target, the middle trades the two places. One `set` for the whole move —
    * detaching and re-inserting in two commits would leave a frame where the
-   * pane holds no slot, and a pane with no slot is hidden, which blinks its
-   * webview. A refusal leaves the wall exactly as it was.
+   * pane holds no slot, and a pane with no slot is hidden, which reloads the
+   * page in it. A refusal leaves the wall exactly as it was.
    */
   rearrangePane: (paneId: PaneId, targetPaneId: PaneId, zone: DropZone) => void;
   deletePane: (paneId: PaneId) => void;
@@ -131,27 +123,6 @@ export const useWallStore = create<WallState>((set, get) => ({
     }));
   },
 
-  setPaneStrategy: (paneId, strategy) => {
-    const node = get().tree.nodes[paneId];
-    if (node === undefined || !isPane(node) || node.strategy === strategy) {
-      return;
-    }
-    const change = rendererChange(node.strategy, strategy);
-    set((state) => ({ tree: setPaneStrategy(state.tree, paneId, strategy) }));
-    if (!change.changed) return;
-
-    if (change.releases) {
-      // The webviews being left behind were never in the DOM, so React dropping
-      // the pane's content cannot take them with it. Without this they keep
-      // painting over the wall. Delete and closing a site are the only other
-      // places one dies.
-      releasePane(paneId);
-    }
-    // The content is rebuilt either way — that is the reload the control warns
-    // about — and the verdicts on file were answered for the other renderer.
-    get().reloadPane(paneId);
-  },
-
   // Tree actions delegate to the pure functions and keep no logic of their
   // own, which is what lets the tree be tested without React or a DOM.
   splitPane: (paneId, direction) => {
@@ -186,10 +157,6 @@ export const useWallStore = create<WallState>((set, get) => ({
         for (const site of node.sites) delete load[site.id];
       }
       const { [paneId]: _droppedError, ...urlError } = state.urlError;
-      // A native webview is not removed by React, because it was never in the
-      // DOM. Delete is the only place it is right to destroy every one a pane
-      // holds at once.
-      releasePane(paneId);
       // React drops the host element, but the last rect it was placed at lives
       // in a plain Map outside React and would otherwise be kept for the life
       // of the process.
