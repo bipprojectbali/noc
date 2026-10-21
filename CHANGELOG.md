@@ -1,5 +1,69 @@
 # Changelog
 
+## [0.4.0] - 2026-10-21
+
+### Removed
+
+- The desktop app is gone, and with it the whole second way of drawing a pane.
+  It existed to do two things a web page could not: load sites that refuse to
+  be framed, and keep a pane signed in. Both of those are what 0.3.0's
+  same-site proxy does, in an ordinary browser, with nothing to install — so
+  the desktop app was carrying no job of its own, while costing a second code
+  path for every feature and a native view that painted over everything the
+  app drew. Three visible annoyances leave with it: a pane no longer reserves
+  a strip of its own height for its ⋮ button, opening a pane's menu no longer
+  blanks every other pane on the wall, and dragging a pane no longer blanks
+  them either. Nothing you could do in the desktop app is lost except the one
+  item below, and the wall it ran is the same wall your browser opens.
+
+- Importing cookies from your browser is gone with it, and there is no web
+  replacement. It worked by writing into the private cookie store the desktop
+  app's panes shared, which a page has no way to reach. Signing in inside a
+  pane works — that is what the same-site proxy restored — but it is once per
+  site, by hand, rather than all at once from an export. If signing each site
+  in individually turns out to be the thing that hurts, say so: the wall could
+  learn to hold them at the proxy instead, which is a new feature with its own
+  consequences rather than the old one moved across.
+
+- Choosing a pane's renderer is gone, because there is now only one. Walls
+  saved with that choice in them open normally; the setting is dropped on the
+  way in.
+
+### Added
+
+- The wall ships as one file. `bun run build:binary` produces a single
+  executable holding the server, the interface and its icons, so a monitoring
+  box gets one file to copy and nothing to install — no runtime, no toolchain,
+  no folder of assets to keep together. `bun run build:binary:all` builds it
+  for six platforms at once. Started from anywhere on the machine, it keeps its
+  database where your operating system keeps application data rather than in
+  whatever folder it happened to be launched from, so a wall survives being
+  moved, relaunched from a different place, or started by something other than
+  a shell; `NOC_DATA_DIR` still overrides that if you want the database
+  somewhere specific. An operator who used the old desktop app will find their
+  existing wall already there — it is the same directory.
+
+- The wall installs as an app. A Chromium browser now offers to install it,
+  and the installed window has no address bar and no tabs, which is the window
+  a wall-mounted monitor wanted the desktop app for. It installs over plain
+  HTTP on the local address, so nothing has to be set up to try it, and the
+  icon is drawn to survive being cropped round or square by whatever launcher
+  shows it. There is no offline mode and this does not add one: every pane is a
+  live page from somewhere else, so a wall with no network has nothing to show
+  whether or not the shell is cached.
+
+- Fullscreen can be sent to a monitor you name. A wall usually wants to fill
+  one particular screen rather than whichever one the window drifted onto, so
+  where the browser can see your monitors the control lists them and sends the
+  wall to the one you pick; everywhere else it fullscreens the usual way.
+  Naming them requires a permission, which is asked for only when you use the
+  control.
+
+Not seen on screen yet: no install has been attempted, the fullscreen control
+has never been displayed, the multi-monitor path has no coverage at all, and
+while the compiled binary has been run and answers every request correctly, no
+browser has drawn a wall from one. See "Open items" in the README.
+
 ## [0.3.0] - 2026-10-20
 
 ### Added
