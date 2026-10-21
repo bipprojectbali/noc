@@ -24,6 +24,11 @@ export type NocConfig = {
   host: string;
   /** `0` asks the OS for an ephemeral port; the real one is only known once bound. */
   port: number;
+  /**
+   * Relative under `bun run dev`/`start` and absolute in the compiled binary —
+   * see `defaultDataDir`. Either way it is resolved against an explicit base by
+   * `databasePath`, never against the working directory.
+   */
   dataDir: string;
   dbFile: string;
   logLevel: LogLevel;
@@ -39,6 +44,7 @@ const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 7788;
 const DEFAULT_DATA_DIR = ".noc-data";
 const DEFAULT_DB_FILE = "noc.sqlite";
+const DEFAULT_LOG_LEVEL: LogLevel = "info";
 
 /**
  * Directory name under the per-user data root.
@@ -51,7 +57,6 @@ const DEFAULT_DB_FILE = "noc.sqlite";
  * answer to "where is my database".
  */
 const APP_DIR_NAME = "dev.noc.wall";
-const DEFAULT_LOG_LEVEL: LogLevel = "info";
 
 const LOG_LEVELS: readonly LogLevel[] = ["error", "warn", "info", "debug"];
 
