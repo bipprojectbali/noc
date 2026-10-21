@@ -16,14 +16,7 @@ describe("readConfig defaults", () => {
       dataDir: ".noc-data",
       dbFile: "noc.sqlite",
       logLevel: "info",
-      parentPid: null,
     });
-  });
-
-  test("watches no parent unless told to", () => {
-    // Only a sidecar has a parent worth outliving nothing; a dev server is
-    // stopped by whoever started it.
-    expect(readConfig({}).parentPid).toBeNull();
   });
 
   test("treats an empty string as absent", () => {
@@ -42,7 +35,6 @@ describe("readConfig overrides", () => {
         NOC_DATA_DIR: "/var/lib/noc",
         NOC_DB_FILE: "wall.sqlite",
         NOC_LOG_LEVEL: "debug",
-        NOC_PARENT_PID: "4242",
       }),
     ).toEqual({
       host: "0.0.0.0",
@@ -50,13 +42,12 @@ describe("readConfig overrides", () => {
       dataDir: "/var/lib/noc",
       dbFile: "wall.sqlite",
       logLevel: "debug",
-      parentPid: 4242,
     });
   });
 
   test("accepts port 0, which asks the OS for a free one", () => {
-    // How the shell starts the sidecar: a fixed port can be held by another copy
-    // of the app, and the real port is read back from the ready line.
+    // An ephemeral port is the way to run a second wall alongside one that
+    // already holds 7788; the real port is printed on the listening line.
     expect(readConfig({ NOC_PORT: "0" }).port).toBe(0);
   });
 });
@@ -70,15 +61,6 @@ describe("readConfig rejects bad input with a message naming the variable", () =
   ])("NOC_PORT=%p", (value) => {
     expect(() => readConfig({ NOC_PORT: value })).toThrow(/NOC_PORT/);
   });
-
-  test.each([["0"], ["-3"], ["12.5"], ["nope"]])(
-    "NOC_PARENT_PID=%p",
-    (value) => {
-      expect(() => readConfig({ NOC_PARENT_PID: value })).toThrow(
-        /NOC_PARENT_PID/,
-      );
-    },
-  );
 
   test("an unknown log level", () => {
     expect(() => readConfig({ NOC_LOG_LEVEL: "shout" })).toThrow(

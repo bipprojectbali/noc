@@ -12,7 +12,6 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createHostDispatch,
-  stayOnHostUrl,
   STAY_ON_HOST_PARAM,
   WALL_SHELL_PATH,
 } from "../../src/server/server.host-dispatch.ts";
@@ -74,7 +73,7 @@ describe("wall routes on a site host", () => {
     expect(proxied).toEqual([]);
   });
 
-  test("so does a plain loopback host, which is how Tauri reaches it", async () => {
+  test("so does a plain loopback host, which is how a stayed-on wall calls", async () => {
     // Also the proof that the wall-host redirect cannot reach an API call: it
     // lives in the catch-all, and a route is matched before the catch-all. A
     // 307 here would turn the layout's PUT into a second request to a host the
@@ -133,11 +132,11 @@ describe("the catch-all", () => {
     );
   });
 
-  test("the address the ready line announces stays put, which is how the shell is spared", async () => {
-    // The shell opens the ready-line URL verbatim, and the server writes that
-    // line — so this, not a user-agent string, is what tells the two apart.
-    const announced = stayOnHostUrl("http://127.0.0.1:7788/");
-    expect(new URL(announced).searchParams.has(STAY_ON_HOST_PARAM)).toBe(true);
+  test("the opt-out flag keeps a loopback address where it was typed", async () => {
+    // What it is for: this repo's own cross-site control experiment needs a
+    // wall served from `127.0.0.1`, which is exactly what the move above takes
+    // away. An ordinary query flag, so it survives a reload of the page.
+    const announced = `http://127.0.0.1:7788/?${STAY_ON_HOST_PARAM}=1`;
 
     const { dispatch, shellRequests } = dispatchFor();
     const response = await dispatch.catchAll(new Request(announced), noUpgrade);

@@ -34,25 +34,15 @@ export const WALL_SHELL_PATH = "/__noc-shell";
 
 /**
  * The one mark on a wall URL that means "answer me on this host, do not move
- * me". Structural, not a user-agent sniff: a browser's address is typed by a
- * human and will never carry this, while the native shell's address is
- * *configured* by this server — Rust parses `noc-ready <url>` off stdout and
- * opens that URL verbatim (invariant 4), so what the shell asks for is decided
- * here, in `server.entry.ts`, by `stayOnHostUrl`. It survives a reload because
- * it lives in the address, and it costs `src-tauri/` nothing.
+ * me". It survives a reload because it lives in the address bar.
  *
- * A plain flag rather than a secret on purpose: the second thing that needs it
- * is the repo's own cross-site control run (`cookie.demo-page.ts`), where a
- * human wants the `127.0.0.1` wall precisely because sessions break there.
+ * Its remaining consumer is the repo's own cross-site control run
+ * (`cookie.demo-page.ts`), where a human wants the `127.0.0.1` wall precisely
+ * because sessions break there — the whole point of the comparison. A plain
+ * flag rather than a secret for that reason: nothing is protected by it, it
+ * only declines a convenience.
  */
 export const STAY_ON_HOST_PARAM = "stay";
-
-/** The address to announce on the ready line: this host, kept. */
-export function stayOnHostUrl(href: string): string {
-  const url = new URL(href);
-  url.searchParams.set(STAY_ON_HOST_PARAM, "1");
-  return url.href;
-}
 
 export interface HostDispatchDeps {
   readonly registry: ProxySiteRegistry;
