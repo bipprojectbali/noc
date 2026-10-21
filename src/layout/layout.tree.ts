@@ -18,7 +18,6 @@ import {
   type PaneId,
   type PaneNode,
   type PaneSide,
-  type PaneStrategy,
   type SplitDirection,
   type SplitNode,
 } from "./layout.types.ts";
@@ -196,17 +195,5 @@ export function setPaneUrlBarVisible(
   return {
     ...tree,
     nodes: { ...tree.nodes, [paneId]: { ...pane, urlBarVisible: visible } },
-  };
-}
-
-export function setPaneStrategy(
-  tree: LayoutTree,
-  paneId: PaneId,
-  strategy: PaneStrategy,
-): LayoutTree {
-  const pane = requirePane(tree, paneId);
-  return {
-    ...tree,
-    nodes: { ...tree.nodes, [paneId]: { ...pane, strategy } },
   };
 }

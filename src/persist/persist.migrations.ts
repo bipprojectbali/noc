@@ -12,6 +12,13 @@
  * there. Whole, not statement by statement, because a step is one transaction:
  * its data statements committed together with its DDL or not at all, so the
  * column's presence is proof the rest landed too.
+ *
+ * `dropsColumn` is the same guard read the other way, for a step that takes a
+ * column away. SQLite will not `DROP COLUMN` one carrying a `CHECK`, so such a
+ * step rebuilds the table from a column list frozen at the day it was written.
+ * Replayed, that list is the damage: anything a later step added to the table
+ * is not in it and does not survive the copy. The column's *absence* is the
+ * proof the step already ran, so it is skipped when the column is gone.
  */
 
 export type MigrationStep = {
@@ -19,6 +26,8 @@ export type MigrationStep = {
   statements: readonly string[];
   /** The one column this step adds, when it adds one. See above. */
   addsColumn?: { table: string; column: string };
+  /** The one column this step removes, when it removes one. See above. */
+  dropsColumn?: { table: string; column: string };
 };
 
 export const MIGRATIONS: readonly MigrationStep[] = [
@@ -175,6 +184,48 @@ export const MIGRATIONS: readonly MigrationStep[] = [
       // rather than overwriting it, so this is belt and braces — but the
       // stamp is the contract, and the migration being forgiving is not.
       `UPDATE layouts SET layout_version = 3 WHERE layout_version = 2`,
+    ],
+  },
+  {
+    // A pane no longer chooses a renderer. The native webview existed to show
+    // sites that refuse framing and to let a pane hold a session; the same-site
+    // proxy answers both, so there is one renderer and nothing left to store.
+    //
+    // A rebuild rather than `ALTER TABLE panes DROP COLUMN strategy`: SQLite
+    // refuses to drop a column named in a `CHECK`, and this one is. The other
+    // two legacy columns ride across unchanged — `home_url` still feeds step
+    // 2's backfill on a database that has never been opened since.
+    version: 4,
+    dropsColumn: { table: "panes", column: "strategy" },
+    statements: [
+      `CREATE TABLE IF NOT EXISTS panes_without_strategy (
+         id TEXT NOT NULL,
+         layout_id TEXT NOT NULL REFERENCES layouts(id) ON DELETE CASCADE,
+         parent_id TEXT,
+         home_url TEXT,
+         current_url TEXT,
+         url_bar_visible INTEGER NOT NULL CHECK (url_bar_visible IN (0, 1)),
+         created_at INTEGER NOT NULL,
+         PRIMARY KEY (layout_id, id)
+       )`,
+      // Column names on both sides, so the copy cannot silently shift if the
+      // old table's order ever differed from what step 1 wrote.
+      `INSERT OR IGNORE INTO panes_without_strategy
+         (id, layout_id, parent_id, home_url, current_url,
+          url_bar_visible, created_at)
+       SELECT id, layout_id, parent_id, home_url, current_url,
+              url_bar_visible, created_at
+       FROM panes`,
+      // The old table's index goes with it; the rename does not bring one.
+      `DROP TABLE panes`,
+      `ALTER TABLE panes_without_strategy RENAME TO panes`,
+      `CREATE INDEX IF NOT EXISTS panes_layout_created_idx
+         ON panes (layout_id, created_at)`,
+      // The rows now express a version 4 tree. Same reason as the stamps in
+      // steps 2 and 3: the 3 → 4 tree migration only drops a property these
+      // rows can no longer produce, so running it again would be harmless —
+      // but the stamp is the contract and the migration's forgiveness is not.
+      `UPDATE layouts SET layout_version = 4 WHERE layout_version = 3`,
     ],
   },
 ];

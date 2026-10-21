@@ -251,7 +251,7 @@ describe("a wall stored by the version 1 schema still opens", () => {
     seedVersion1Database(dbPath);
 
     const opened = openFile(10);
-    expect(opened.version).toBe(3);
+    expect(opened.version).toBe(4);
     const loaded = createWallRepository(opened.db, () => 11).loadWall();
 
     const stamp = opened.db
@@ -280,9 +280,9 @@ describe("a wall stored by the version 1 schema still opens", () => {
     // A pane that never held an address gets no site rather than an empty one.
     expect(paneOf(tree, "pane-b").sites).toEqual([]);
     expect(paneOf(tree, "pane-b").activeSiteId).toBeNull();
-    // The rows now describe a version 3 tree, so the stamp has to agree or the
+    // The rows now describe a version 4 tree, so the stamp has to agree or the
     // next read re-runs the tree migrations and wipes what it restored.
-    expect(stamp?.layout_version).toBe(3);
+    expect(stamp?.layout_version).toBe(4);
   });
 
   test("the migrated wall can then grow sites and still round-trips", () => {
@@ -313,7 +313,7 @@ describe("a wall stored by the version 1 schema still opens", () => {
     // Forcing the version row back is the state an interrupted upgrade leaves:
     // the table is there, the row says it is not.
     opened.db.run("UPDATE schema_version SET version = 1 WHERE id = 1");
-    expect(migrate(opened.db, 20)).toBe(3);
+    expect(migrate(opened.db, 20)).toBe(4);
 
     const sites = opened.db
       .query<{ site_id: string; position: number }, []>(
@@ -334,7 +334,7 @@ describe("a wall stored by the version 1 schema still opens", () => {
     // `ADD COLUMN IF NOT EXISTS`, so without the step's `addsColumn` guard this
     // throws "duplicate column name" and the wall never opens again.
     opened.db.run("UPDATE schema_version SET version = 2 WHERE id = 1");
-    expect(migrate(opened.db, 20)).toBe(3);
+    expect(migrate(opened.db, 20)).toBe(4);
 
     const row = opened.db
       .query<{ zoom: number }, []>(

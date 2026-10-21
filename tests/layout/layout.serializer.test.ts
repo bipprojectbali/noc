@@ -131,9 +131,18 @@ describe("migrating a version 1 layout", () => {
       ],
       activeSiteId: "left-s1",
       urlBarVisible: true,
-      strategy: "webview",
       createdAt: 1,
     });
+  });
+
+  test("the renderer it chose is read and dropped, not refused", () => {
+    // Every pane in this payload names one, and there is one renderer now. The
+    // node must come back without the property at all: a leftover would make a
+    // restored wall unequal to a fresh one, which the row writer assumes.
+    const tree = parseLayout(structuredClone(V1_PAYLOAD));
+    for (const node of Object.values(tree.nodes)) {
+      expect(node).not.toHaveProperty("strategy");
+    }
   });
 
   test("a pane that had no url comes back empty, not holding a null site", () => {
@@ -210,6 +219,7 @@ describe("migrating a version 2 layout", () => {
       { id: "solo-s1", url: "https://info.cern.ch/", createdAt: 1, zoom: 1 },
       { id: "solo-s2", url: "https://example.com/", createdAt: 2, zoom: 1 },
     ]);
+    expect(soloPane(tree)).not.toHaveProperty("strategy");
     // A wall restored from this must pass the same checks as any other, or the
     // whole layout is refused at startup and the operator loses it.
     expect(findViolations(tree)).toEqual([]);
