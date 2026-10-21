@@ -4,6 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>NOC wall</title>
+    <!-- The manifest link, the theme colour and the icons are not here: Bun's
+         HTML bundler resolves every `href` it finds against the filesystem at
+         build time, so an absolute path answered by a route is a build error,
+         and a relative one would be rewritten to a hashed asset URL that the
+         manifest's own `icons[].src` could never match. They are appended to
+         this head by `src/pwa/pwa.head.ts` on the way out instead, which keeps
+         the paths in one place and costs this file nothing. -->
     <link rel="stylesheet" href="./src/app/app.css" />
   </head>
   <body>

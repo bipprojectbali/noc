@@ -18,6 +18,7 @@ import {
   handleCookieDemoRead,
   handleCookieDemoSet,
 } from "./cookie.demo.ts";
+import { pwaAssetRoutes } from "../pwa/pwa.assets.ts";
 import { WALL_SHELL_PATH, createHostDispatch } from "./server.host-dispatch.ts";
 import {
   EMBEDDABILITY_PATH,
@@ -69,6 +70,15 @@ try {
     hostname: config.host,
     port: config.port,
     routes: {
+      // The manifest and its icons. Real routes, so the landing redirect in the
+      // catch-all cannot swallow them, and `wallOnly` so a proxied site keeps
+      // whatever it has under the same names.
+      ...Object.fromEntries(
+        Object.entries(pwaAssetRoutes).map(([path, handler]) => [
+          path,
+          wallOnly(handler),
+        ]),
+      ),
       [EMBEDDABILITY_PATH]: wallOnly(
         createEmbeddabilityHandler({ registry: proxySiteRegistry }),
       ),
