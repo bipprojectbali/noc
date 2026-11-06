@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { normalizePaneUrl } from "../../src/pane/pane.url.ts";
+import {
+  normalizePaneUrl,
+  siteShortLabel,
+  siteShortLabels,
+} from "../../src/pane/pane.url.ts";
 
 describe("normalizePaneUrl accepts", () => {
   test("a full https url, normalized", () => {
@@ -64,5 +68,57 @@ describe("normalizePaneUrl rejects", () => {
 
   test("text that is not a url at all", () => {
     expect(normalizePaneUrl("not a url").ok).toBe(false);
+  });
+});
+
+describe("siteShortLabel", () => {
+  const cases: [string, string][] = [
+    ["https://ravenstone.wibudev.com/", "ravenstone"],
+    ["https://contohweb.com/", "contohweb"],
+    ["https://contoh.co.id/", "contoh"],
+    ["https://app.contoh.co.id/", "app"],
+    ["https://www.contohweb.com/", "contohweb"],
+    ["https://www.ravenstone.wibudev.com/", "ravenstone"],
+    ["https://grafana.ops.wibudev.com/", "grafana"],
+    ["http://192.168.1.10:3000/x", "192.168.1.10:3000"],
+    ["http://localhost:3000", "localhost:3000"],
+    ["http://[::1]:8080", "[::1]:8080"],
+    ["https://RavenStone.WibuDev.com./", "ravenstone"],
+    ["https://ravenstone.wibudev.com:8443/", "ravenstone"],
+    ["not a url", "not a url"],
+    ["https://co.id/", "co.id"],
+  ];
+  for (const [url, label] of cases) {
+    test(`${url} → ${label}`, () => {
+      expect(siteShortLabel(url)).toBe(label);
+    });
+  }
+});
+
+describe("siteShortLabels", () => {
+  test("a short name two hosts share falls back to both full hosts", () => {
+    expect(siteShortLabels(["https://api.a.com/", "https://api.b.com/"])).toEqual([
+      "api.a.com",
+      "api.b.com",
+    ]);
+  });
+
+  test("distinct short names stay short", () => {
+    expect(
+      siteShortLabels(["https://ravenstone.wibudev.com/", "https://contohweb.com/"]),
+    ).toEqual(["ravenstone", "contohweb"]);
+  });
+
+  test("the same url twice is one host, so both stay short", () => {
+    expect(siteShortLabels(["https://contohweb.com/a", "https://contohweb.com/b"])).toEqual(
+      ["contohweb", "contohweb"],
+    );
+  });
+
+  test("localhost on two ports is already distinct", () => {
+    expect(siteShortLabels(["http://localhost:3000/", "http://localhost:9090/"])).toEqual([
+      "localhost:3000",
+      "localhost:9090",
+    ]);
   });
 });

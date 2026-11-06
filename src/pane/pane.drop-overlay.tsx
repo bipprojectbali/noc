@@ -4,7 +4,7 @@
  * It exists only while a drag is in flight; outside that window it renders
  * nothing at all. Every pane gets a marked state for the duration: the one
  * being carried, the one about to receive it with the landing area shaded, and
- * every other pane outlined and named by host — so the gesture reads as one
+ * every other pane outlined and named by its short site name — so the gesture reads as one
  * move across the whole wall rather than an effect on two of its boxes.
  *
  * `pointer-events: none` throughout, or the overlay would be the thing
@@ -16,11 +16,11 @@ import { activePaneUrl } from "../layout/layout.sites.ts";
 import { isPane, type PaneId } from "../layout/layout.types.ts";
 import { usePaneDragStore } from "./pane.drag.ts";
 import { useWallStore } from "./pane.store.ts";
-import { urlHostLabel } from "./pane.url.ts";
+import { siteShortLabel } from "./pane.url.ts";
 
-/** The pane's host, or a word for a pane that has no address yet. */
+/** The pane's short site name, or a word for a pane that has no address yet. */
 function paneLabel(url: string | null): string {
-  return url === null ? "Empty pane" : urlHostLabel(url);
+  return url === null ? "Empty pane" : siteShortLabel(url);
 }
 
 export function PaneDropOverlay({ paneId }: { paneId: PaneId }) {
