@@ -77,6 +77,7 @@ describe("a wall served from its own proxy host", () => {
     await waitFor(() => expect(frameSrc()).toContain(".noc.localhost"), WAIT);
 
     fireEvent.click(screen.getByTestId(`pane-menu-button-${PANE_ID}`));
+    fireEvent.click(screen.getByTestId(`pane-url-edit-${PANE_ID}`));
     const input = screen.getByLabelText(`URL for pane ${PANE_ID}`) as HTMLInputElement;
     expect(input.value).toBe("https://grafana.internal/d/abc?from=now-6h");
   });

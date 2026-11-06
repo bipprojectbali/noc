@@ -40,6 +40,7 @@ import {
 import { usePaneDragHandle } from "./pane.drag.ts";
 import { usePaneMenuDismiss } from "./pane.menu-dismiss.ts";
 import { PaneMenuPanel } from "./pane.menu-panel.tsx";
+import { urlHostLabel } from "./pane.url.ts";
 import type { PaneZoomControl } from "./pane.menu-zoom.tsx";
 import {
   PaneSiteSwitcher,
@@ -84,12 +85,15 @@ export function PaneMenu({
   const dragHandle = usePaneDragHandle(paneId, () => onOpenChange(!open));
 
   // A dropdown, not a popover: focus follows the menu in and comes back out
-  // again. In goes to the address field rather than the first item, because
-  // that is what the menu is opened for; out is skipped when the button has
-  // gone with its pane, which `Close` does while the menu is still up.
+  // again. In goes to the panel's first control — the address field on an empty
+  // pane, the ✎ row that stands in for it otherwise — scoped to the panel so the
+  // pips and ⋮ before it in the chrome are never picked. Out is skipped when
+  // the button has gone with its pane, which `Close` does while the menu is up.
   useEffect(() => {
     if (!open) return;
-    rootRef.current?.querySelector("input")?.focus();
+    rootRef.current
+      ?.querySelector<HTMLElement>('[role="menu"] input, [role="menu"] button')
+      ?.focus();
     return () => buttonRef.current?.focus();
   }, [open]);
 
@@ -126,7 +130,7 @@ export function PaneMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Menu for pane ${paneId}`}
-        title={url ?? "Pane menu"}
+        title={url === null ? "Pane menu" : urlHostLabel(url)}
         data-testid={`pane-menu-button-${paneId}`}
         {...dragHandle}
       >

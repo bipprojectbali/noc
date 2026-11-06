@@ -104,11 +104,12 @@ describe("⋮ is the only permanent chrome, and it opens the rest", () => {
     await loadUrl(ROOT, "https://example.com/some/deep/path");
 
     // The label was what made a wall of panes look stitched together. The host
-    // survives only as the button's tooltip, which costs no pixels.
+    // survives only as the button's tooltip, which costs no pixels — and only
+    // the host, never the path: see `pane.menu-url.test`.
     const chrome = screen.getByTestId(`pane-chrome-${ROOT}`);
     expect(chrome.textContent).not.toContain("example.com");
     expect(screen.getByTestId(`pane-menu-button-${ROOT}`).getAttribute("title")).toBe(
-      "https://example.com/some/deep/path",
+      "example.com",
     );
   });
 

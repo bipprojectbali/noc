@@ -222,6 +222,7 @@ describe("PaneFrame chrome never disturbs the page", () => {
     const parentBefore = before.parentNode;
 
     openMenu();
+    fireEvent.click(screen.getByTestId(`pane-url-edit-${PANE_ID}`));
     expect(screen.getByLabelText(`URL for pane ${PANE_ID}`)).toBeDefined();
     openMenu();
 

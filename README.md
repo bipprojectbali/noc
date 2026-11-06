@@ -12,7 +12,8 @@ pane's iframe. Panes can also be rearranged after the fact: drag one by its ⋮
 onto another pane's edge to land beside it, or onto its middle to trade the two
 places, with no page reloading either way. A pane's whole chrome is one ⋮
 button floating over its top-right corner, costing the pane no height at all;
-it opens a dropdown holding the address field, a zoom row, Reload, Split right,
+it opens a dropdown holding the site's host (✎ reveals the full address for
+editing, so a shared screen never shows a token in a path), a zoom row, Reload, Split right,
 Split down and Close. The zoom row steps the page along the browser's own
 ladder, 50% to 200%, so a dashboard built for a full screen can be shrunk until
 it fits or a small number enlarged until it is legible from across the room;
@@ -259,9 +260,11 @@ the button is focused, or the menu is open, and it carries its own dark fill and
 hairline ring so it stays legible over a white dashboard and a dark one alike.
 
 The button opens an ordinary desktop dropdown: fixed 224px, hung under the
-button and aligned to it, with the address field at the top, a zoom row, Reload,
+button and aligned to it, with the address at the top, a zoom row, Reload,
 Split right and Split down as 28px rows, and Close last in the danger colour.
-Enter submits the address; there is no Go button. Right-click opens the same
+The address shows as its host and a ✎; only pressing ✎ (or an empty pane)
+puts the full address in an editable field. Enter submits it; there is no Go
+button. Right-click opens the same
 menu on the chrome and on an empty pane's message — not over a loaded page,
 which is a platform limit and not an omission: a cross-origin iframe never hands
 `contextmenu` to its parent. Minimise and the dock strip are gone from the UI;
