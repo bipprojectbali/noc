@@ -28,11 +28,21 @@
   site, how long it waited, and that `NOC_LOAD_TIMEOUT` raises the limit —
   instead of a cut connection that reads as "offline".
 
+### Changed
+
+- A pane's full address no longer sits on screen for anyone watching the wall.
+  The ⋮ menu shows only the site's host with a ✎ beside it; press ✎ to see and
+  edit the whole address, which may carry a token in its path or query. Once a
+  new address is accepted it hides again; one that is refused stays open with
+  the reason. An empty pane and "Add site…" still open straight onto the field.
+  Hovering ⋮ or a site in the menu shows the host only, never the full address.
+
 Not seen on screen yet: no slow site has been watched loading in a pane. The
 fix is proven by an experiment against the server and by unit tests. A site
 whose service worker has its own network timeout will still show its offline
 page however long the wall waits — that is the site's decision; opening the
-same address in a plain browser tab while it is slow tells the two apart.
+same address in a plain browser tab while it is slow tells the two apart. The
+host-and-✎ row in the menu has not been looked at in a browser either.
 
 ## [0.4.0] - 2026-10-21
 

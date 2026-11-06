@@ -10,16 +10,19 @@
  * Three groups: what the pane shows, what to do to it, and the one that
  * destroys it. The address is first because giving a pane a URL is the one thing
  * this menu exists for; Enter submits it, and a Go button bought nothing a form
- * already does.
+ * already does. A pane that already has one shows only its host until ✎ is
+ * pressed: a wall is screen-shared and screenshotted, and a path or query can
+ * carry a token. The same goes for every tooltip in the chrome — host only.
  *
  * Split from `pane.menu` along the line that matters rather than to make two
  * files: that one owns the panel's lifetime, this one owns its contents and
- * holds nothing but the address being typed.
+ * holds nothing but the address being typed and whether it is being edited.
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { PaneId, SplitDirection } from "../layout/layout.types.ts";
+import { urlHostLabel } from "./pane.url.ts";
 import { PaneMenuSites } from "./pane.menu-sites.tsx";
 import { PaneMenuZoomField, type PaneZoomControl } from "./pane.menu-zoom.tsx";
 import type { PaneSitesControl } from "./pane.site-switcher.tsx";
@@ -91,6 +94,8 @@ export function PaneMenuPanel({
   const [draft, setDraft] = useState(url ?? "");
   /** Whether Enter appends a page instead of repointing the one on screen. */
   const [adding, setAdding] = useState(false);
+  /** Whether the full address may be on screen; see the docblock. */
+  const [editing, setEditing] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   // Slide the panel back inside the window. Imperative and in a layout effect
@@ -111,12 +116,13 @@ export function PaneMenuPanel({
     if (shift.x !== 0 || shift.y !== 0) {
       node.style.transform = `translate(${shift.x}px, ${shift.y}px)`;
     }
-  }, [adding, error, sites.list.length]);
+  }, [adding, editing, error, sites.list.length]);
 
   // Follow the pane's url when it changes elsewhere, without fighting typing.
   useEffect(() => {
     setDraft(url ?? "");
     setAdding(false);
+    setEditing(false);
   }, [url]);
 
   const actions = [
@@ -132,29 +138,46 @@ export function PaneMenuPanel({
       role="menu"
       data-testid={`pane-menu-${paneId}`}
     >
-      <form
-        className="noc-pane__menu-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (adding) sites.add(draft);
-          else onSubmit(draft);
-        }}
-      >
-        <input
-          // Remounted when the mode changes so `autoFocus` puts the caret back
-          // in the field the user has just been told to type in.
-          key={adding ? "add" : "point"}
-          className="noc-pane__input"
-          autoFocus
-          aria-label={
-            adding ? `New site URL for pane ${paneId}` : `URL for pane ${paneId}`
-          }
-          aria-invalid={error !== null}
-          placeholder={adding ? "New site URL, then Enter" : "URL, then Enter"}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-        />
-      </form>
+      {editing || adding || url === null ? (
+        <form
+          className="noc-pane__menu-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (adding) sites.add(draft);
+            else onSubmit(draft);
+          }}
+        >
+          <input
+            // Remounted when the mode changes so `autoFocus` puts the caret back
+            // in the field the user has just been told to type in.
+            key={adding ? "add" : "point"}
+            className="noc-pane__input"
+            autoFocus
+            aria-label={
+              adding ? `New site URL for pane ${paneId}` : `URL for pane ${paneId}`
+            }
+            aria-invalid={error !== null}
+            placeholder={adding ? "New site URL, then Enter" : "URL, then Enter"}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+        </form>
+      ) : (
+        // Inside the form's box so the row sits exactly where the field will.
+        <div className="noc-pane__menu-form">
+          <button
+            className="noc-pane__menu-item noc-pane__menu-url"
+            type="button"
+            role="menuitem"
+            aria-label={`Edit URL for pane ${paneId}`}
+            data-testid={`pane-url-edit-${paneId}`}
+            onClick={() => setEditing(true)}
+          >
+            <span className="noc-pane__menu-url-host">{urlHostLabel(url)}</span>
+            <span aria-hidden="true">✎</span>
+          </button>
+        </div>
+      )}
 
       {error !== null && (
         <span className="noc-pane__menu-error" role="alert">

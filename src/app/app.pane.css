@@ -258,6 +258,23 @@
   color: var(--noc-text);
 }
 
+/* Stands in for the address field on a pane that has one, at the field's height
+   (it is a menu item, 28px, in the form's box): the host only, the full URL only
+   once ✎ is pressed. Host ellipsises, the pencil never does. */
+.noc-pane__menu-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.noc-pane__menu-url-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* Muted until it is reached, and the danger colour only then: a × that is red
    all the time reads as a warning about the row it sits on. */
 .noc-pane__menu-site-remove {

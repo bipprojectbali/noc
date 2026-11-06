@@ -48,7 +48,7 @@ export function PaneMenuSites({
             aria-checked={site.id === sites.activeId}
             data-active={site.id === sites.activeId}
             data-testid={`pane-site-row-${site.id}`}
-            title={site.url}
+            title={urlHostLabel(site.url)}
             onClick={() => sites.activate(site.id)}
           >
             {index + 1}. {urlHostLabel(site.url)}
