@@ -61,7 +61,7 @@ describe("the full URL is on screen only while it is being edited", () => {
     return screen.getByTestId(`pane-chrome-${ROOT}`).innerHTML;
   }
 
-  test("opening the menu shows the host behind ✎, and no field", async () => {
+  test("opening the menu shows the short site name behind ✎, and no field", async () => {
     render(<AppShell />);
     await loadUrl(ROOT, SECRET_URL);
 
@@ -72,7 +72,9 @@ describe("the full URL is on screen only while it is being edited", () => {
     expect(chromeHtml()).not.toContain("s3cret");
     expect(chromeHtml()).not.toContain("/d/abc");
     const edit = screen.getByTestId(`pane-url-edit-${ROOT}`);
-    expect(edit.textContent).toContain("dash.example.test");
+    expect(edit.querySelector(".noc-pane__menu-url-host")?.textContent).toBe("dash");
+    // The organisation's domain stays off a shared screen; tooltips keep it.
+    expect(chromeHtml().replaceAll(/(title|aria-label)="[^"]*"/g, "")).not.toContain("example.test");
     expect(document.activeElement).toBe(edit);
   });
 
@@ -89,6 +91,7 @@ describe("the full URL is on screen only while it is being edited", () => {
       .querySelectorAll('[data-testid^="pane-site-row-"]');
     expect(rows.length).toBe(1);
     expect(rows[0]!.getAttribute("title")).toBe("dash.example.test");
+    expect(rows[0]!.textContent).toBe("1. dash");
   });
 
   test("✎ shows the full URL, focused, ready to edit", async () => {
@@ -104,7 +107,7 @@ describe("the full URL is on screen only while it is being edited", () => {
     expect(screen.queryByTestId(`pane-url-edit-${ROOT}`)).toBeNull();
   });
 
-  test("a valid submit hides the field again and shows the new host", async () => {
+  test("a valid submit hides the field again and shows the new site", async () => {
     render(<AppShell />);
     await loadUrl(ROOT, SECRET_URL);
     openMenu(ROOT);
@@ -117,7 +120,7 @@ describe("the full URL is on screen only while it is being edited", () => {
 
     expect(screen.queryByLabelText(`URL for pane ${ROOT}`)).toBeNull();
     expect(screen.getByTestId(`pane-url-edit-${ROOT}`).textContent).toContain(
-      "other.example.test",
+      "other",
     );
     expect(chromeHtml()).not.toContain("s3cret");
   });
@@ -132,7 +135,7 @@ describe("the full URL is on screen only while it is being edited", () => {
 
     expect(screen.queryByLabelText(`URL for pane ${ROOT}`)).toBeNull();
     expect(screen.getByTestId(`pane-url-edit-${ROOT}`).textContent).toContain(
-      "elsewhere.example.test",
+      "elsewhere",
     );
   });
 

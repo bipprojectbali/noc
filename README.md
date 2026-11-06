@@ -262,7 +262,9 @@ hairline ring so it stays legible over a white dashboard and a dark one alike.
 The button opens an ordinary desktop dropdown: fixed 224px, hung under the
 button and aligned to it, with the address at the top, a zoom row, Reload,
 Split right and Split down as 28px rows, and Close last in the danger colour.
-The address shows as its host and a ✎; only pressing ✎ (or an empty pane)
+The address shows as a short site name and a ✎ (`ravenstone.wibudev.com` →
+"ravenstone", `contohweb.com` → "contohweb"; the full host is in the site
+row's tooltip); only pressing ✎ (or an empty pane)
 puts the full address in an editable field. Enter submits it; there is no Go
 button. Right-click opens the same
 menu on the chrome and on an empty pane's message — not over a loaded page,
@@ -302,8 +304,8 @@ move in one write so no pane is ever briefly slotless. Every way out is covered:
 Escape, a cancelled pointer, the window losing focus, and the dragged pane being
 deleted while its own button is still held.
 
-**Not known.** What it is like to use. Each pane gets a thin ring and its host
-name while a drag runs, and nothing has confirmed that the ring is visible over
+**Not known.** What it is like to use. Each pane gets a thin ring and its short
+site name while a drag runs, and nothing has confirmed that the ring is visible over
 a bright dashboard and over a dark one alike, that the name fits a narrow pane
 rather than being clipped to an ellipsis that says nothing, or that the shaded
 landing area reads as "the pane will go here". Nor whether four pixels is the

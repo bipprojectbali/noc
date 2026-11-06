@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The pane menu and the drag label name a site in one word instead of its full
+  address: `ravenstone.wibudev.com` shows as "ravenstone", `contohweb.com` as
+  "contohweb", and `www.` is skipped. Addresses like `contoh.co.id` are read
+  correctly, as "contoh". The full host is still there when you hover a site in
+  the menu. If two sites in one pane would get the same name (`api.a.com` and
+  `api.b.com`), both show their full host instead. IP addresses and `localhost`
+  keep their port, since that is what tells them apart.
+
 ### Fixed
 
 - A slow site no longer dies in its pane. Any site that took more than ten

@@ -156,6 +156,22 @@ describe("the drop overlay says what is about to happen", () => {
     expect(target.getAttribute("data-drop-zone")).toBe("right");
   });
 
+  test("panes are named by their short site name, not the full host", () => {
+    render(<AppShell />);
+    const other = splitWallInTwo();
+    act(() => {
+      useWallStore.getState().submitUrl(ROOT, "https://ravenstone.wibudev.com/");
+    });
+
+    press(ROOT, 10, 10);
+    move(390, 50);
+
+    expect(screen.getByTestId(`pane-drop-${ROOT}`).textContent).toBe(
+      "Moving ravenstone",
+    );
+    expect(screen.getByTestId(`pane-drop-${other}`).textContent).toBe("Empty pane");
+  });
+
   test("the zone follows the pointer across the target", () => {
     render(<AppShell />);
     const other = splitWallInTwo();

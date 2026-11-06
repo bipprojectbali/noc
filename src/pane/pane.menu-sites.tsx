@@ -17,7 +17,7 @@
 
 import type { PaneId } from "../layout/layout.types.ts";
 import type { PaneSitesControl } from "./pane.site-switcher.tsx";
-import { urlHostLabel } from "./pane.url.ts";
+import { siteShortLabels, urlHostLabel } from "./pane.url.ts";
 
 export function PaneMenuSites({
   paneId,
@@ -34,6 +34,8 @@ export function PaneMenuSites({
   // An empty pane has nothing to list, and the address field above already
   // gives it its first page.
   if (sites.list.length === 0) return null;
+  // Short names on screen; the row's tooltip keeps the full host.
+  const labels = siteShortLabels(sites.list.map((site) => site.url));
 
   return (
     <>
@@ -51,7 +53,7 @@ export function PaneMenuSites({
             title={urlHostLabel(site.url)}
             onClick={() => sites.activate(site.id)}
           >
-            {index + 1}. {urlHostLabel(site.url)}
+            {index + 1}. {labels[index]}
           </button>
           <button
             className="noc-pane__menu-site-remove"

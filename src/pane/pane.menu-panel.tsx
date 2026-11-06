@@ -22,7 +22,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { PaneId, SplitDirection } from "../layout/layout.types.ts";
-import { urlHostLabel } from "./pane.url.ts";
+import { siteShortLabel, siteShortLabels } from "./pane.url.ts";
 import { PaneMenuSites } from "./pane.menu-sites.tsx";
 import { PaneMenuZoomField, type PaneZoomControl } from "./pane.menu-zoom.tsx";
 import type { PaneSitesControl } from "./pane.site-switcher.tsx";
@@ -125,6 +125,17 @@ export function PaneMenuPanel({
     setEditing(false);
   }, [url]);
 
+  // Labelled with the same list as the site rows below, so ✎ and its row agree
+  // even when a shared short name fell back to the full host.
+  const siteIndex = sites.list.findIndex((site) => site.url === url);
+  const activeLabel =
+    url === null
+      ? ""
+      : siteIndex === -1
+        ? siteShortLabel(url)
+        : (siteShortLabels(sites.list.map((site) => site.url))[siteIndex] ??
+          siteShortLabel(url));
+
   const actions = [
     { slug: "reload", label: "Reload", run: onReload },
     { slug: "split-row", label: "Split right", run: () => onSplit("row") },
@@ -173,7 +184,7 @@ export function PaneMenuPanel({
             data-testid={`pane-url-edit-${paneId}`}
             onClick={() => setEditing(true)}
           >
-            <span className="noc-pane__menu-url-host">{urlHostLabel(url)}</span>
+            <span className="noc-pane__menu-url-host">{activeLabel}</span>
             <span aria-hidden="true">✎</span>
           </button>
         </div>
