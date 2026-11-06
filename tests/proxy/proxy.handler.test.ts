@@ -64,6 +64,19 @@ beforeAll(() => {
           }),
         );
       }
+      if (url.pathname === "/slow-body") {
+        // Headers now, the rest well after a short header timeout has elapsed.
+        const encoder = new TextEncoder();
+        const body = new ReadableStream<Uint8Array>({
+          async start(controller) {
+            controller.enqueue(encoder.encode("first;"));
+            await Bun.sleep(80);
+            controller.enqueue(encoder.encode("second"));
+            controller.close();
+          },
+        });
+        return new Response(body, { status: 207 });
+      }
       return new Response(`upstream ${url.pathname}${url.search}`);
     },
   });
@@ -80,6 +93,31 @@ function proxyFor(): { proxy: ReturnType<typeof createProxyHandler>; label: stri
   const label = registry.register(upstreamOrigin);
   if (label === null) throw new Error("upstream origin should be registrable");
   return { proxy: createProxyHandler({ registry }), label };
+}
+
+/** A registered label whose fetches go to `fetchImpl` instead of a socket. */
+function proxyWith(
+  fetchImpl: (input: string, init: RequestInit) => Promise<Response>,
+  upstreamTimeoutMs?: number,
+): { proxy: ReturnType<typeof createProxyHandler>; label: string } {
+  const registry = createProxySiteRegistry();
+  const label = registry.register("http://slow.example.test");
+  if (label === null) throw new Error("test origin should be registrable");
+  return {
+    proxy: createProxyHandler({
+      registry,
+      fetch: fetchImpl as unknown as typeof fetch,
+      ...(upstreamTimeoutMs === undefined ? {} : { upstreamTimeoutMs }),
+    }),
+    label,
+  };
+}
+
+/** A fetch that only ever ends by rejecting when its signal aborts. */
+function fetchUntilAborted(_input: string, init: RequestInit): Promise<Response> {
+  return new Promise((_resolve, reject) => {
+    init.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+  });
 }
 
 function request(path: string, init?: RequestInit): Request {
@@ -215,5 +253,51 @@ describe("hosts nobody put on the wall", () => {
     const proxy = createProxyHandler({ registry });
     await proxy(request("/"), "s-anything-at-all");
     expect(seenRequests).toBe(before);
+  });
+});
+
+describe("waiting for a slow site", () => {
+  test("no headers within the timeout is a 504 naming the host, not the path", async () => {
+    const { proxy, label } = proxyWith(fetchUntilAborted, 20);
+    const response = await proxy(request("/d/secret-token-123"), label);
+    expect(response.status).toBe(504);
+    const body = await response.text();
+    expect(body).toContain("slow.example.test");
+    expect(body).toContain("NOC_LOAD_TIMEOUT");
+    expect(body).not.toContain("secret-token-123");
+  });
+
+  test("once headers arrive the body keeps streaming past the timeout", async () => {
+    // Against the real upstream: a real fetch cuts its body when its signal
+    // aborts, so this only passes if the timer is cleared once headers land.
+    const registry = createProxySiteRegistry();
+    const label = registry.register(upstreamOrigin);
+    if (label === null) throw new Error("upstream origin should be registrable");
+    const proxy = createProxyHandler({ registry, upstreamTimeoutMs: 20 });
+    const response = await proxy(request("/slow-body"), label);
+    expect(response.status).toBe(207);
+    expect(await response.text()).toBe("first;second");
+  });
+
+  test("a timeout of 0 never aborts", async () => {
+    let aborted: boolean | undefined;
+    const { proxy, label } = proxyWith(async (_input, init) => {
+      await Bun.sleep(50);
+      aborted = init.signal?.aborted;
+      return new Response("late but fine");
+    }, 0);
+    const response = await proxy(request("/"), label);
+    expect(aborted).toBe(false);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("late but fine");
+  });
+
+  test("a failure that is not the timer is still a 502", async () => {
+    const { proxy, label } = proxyWith(async () => {
+      throw new Error("connection refused");
+    }, 1000);
+    const response = await proxy(request("/"), label);
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain("connection refused");
   });
 });

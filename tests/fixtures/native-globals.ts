@@ -12,7 +12,9 @@
  * `redirect: "manual"`, automatic gzip decoding, a client socket that carries
  * headers — and none of that is what happy-dom implements. A test that wants to
  * prove the proxy forwards a real body through a real server has to run on the
- * real objects.
+ * real objects. `AbortController`/`AbortSignal` ride along because happy-dom
+ * replaces them too, and Bun's native fetch rejects its signal outright
+ * ("signal is not of type AbortSignal") — the proxy's header timeout needs one.
  *
  * `installNativeFetchGlobals` swaps them in for the length of one test file and
  * `restoreDomFetchGlobals` puts happy-dom back. Bun runs test files one after
@@ -27,6 +29,8 @@ type FetchGlobals = {
   Response: typeof globalThis.Response;
   Headers: typeof globalThis.Headers;
   WebSocket: typeof globalThis.WebSocket;
+  AbortController: typeof globalThis.AbortController;
+  AbortSignal: typeof globalThis.AbortSignal;
 };
 
 function snapshot(): FetchGlobals {
@@ -36,6 +40,8 @@ function snapshot(): FetchGlobals {
     Response: globalThis.Response,
     Headers: globalThis.Headers,
     WebSocket: globalThis.WebSocket,
+    AbortController: globalThis.AbortController,
+    AbortSignal: globalThis.AbortSignal,
   };
 }
 

@@ -168,6 +168,7 @@ Every environment-derived value lives in `src/config/config.env.ts`.
 | `NOC_PORT` | `7788` | Startup fails if taken; it never silently moves. `0` takes any free port. |
 | `NOC_DATA_DIR` | depends | `.noc-data`, relative to the working directory, under `bun run dev`/`start`. In a compiled binary it is the per-user data directory above, because an executable is often launched with its working directory somewhere unwritable. |
 | `NOC_DB_FILE` | `noc.sqlite` | Database file name inside `NOC_DATA_DIR`. |
+| `NOC_LOAD_TIMEOUT` | `120` | Seconds a proxied pane waits for a site's first response before showing a 504 page. Integer `0`–`3600`; `0` waits indefinitely. Covers only the wait for headers, never a streaming body. |
 | `NOC_LOG_LEVEL` | `info` | `error`, `warn`, `info`, `debug`. |
 
 > **Binding to `0.0.0.0` exposes more than the UI.** The embeddability probe

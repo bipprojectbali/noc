@@ -28,11 +28,17 @@ describe("readConfig defaults", () => {
       dataDir: ".noc-data",
       dbFile: "noc.sqlite",
       logLevel: "info",
+      loadTimeoutSeconds: 120,
     });
   });
 
   test("treats an empty string as absent", () => {
-    expect(readConfig({ NOC_PORT: "", NOC_HOST: "", NOC_LOG_LEVEL: "" })).toEqual(
+    expect(readConfig({
+        NOC_PORT: "",
+        NOC_HOST: "",
+        NOC_LOG_LEVEL: "",
+        NOC_LOAD_TIMEOUT: "",
+      })).toEqual(
       readConfig({}),
     );
   });
@@ -47,6 +53,7 @@ describe("readConfig overrides", () => {
         NOC_DATA_DIR: "/var/lib/noc",
         NOC_DB_FILE: "wall.sqlite",
         NOC_LOG_LEVEL: "debug",
+        NOC_LOAD_TIMEOUT: "300",
       }),
     ).toEqual({
       host: "0.0.0.0",
@@ -54,6 +61,7 @@ describe("readConfig overrides", () => {
       dataDir: "/var/lib/noc",
       dbFile: "wall.sqlite",
       logLevel: "debug",
+      loadTimeoutSeconds: 300,
     });
   });
 
@@ -61,6 +69,10 @@ describe("readConfig overrides", () => {
     // An ephemeral port is the way to run a second wall alongside one that
     // already holds 7788; the real port is printed on the listening line.
     expect(readConfig({ NOC_PORT: "0" }).port).toBe(0);
+  });
+
+  test("accepts a load timeout of 0, which waits indefinitely", () => {
+    expect(readConfig({ NOC_LOAD_TIMEOUT: "0" }).loadTimeoutSeconds).toBe(0);
   });
 });
 
@@ -176,6 +188,12 @@ describe("readConfig rejects bad input with a message naming the variable", () =
     ["80.5"],
   ])("NOC_PORT=%p", (value) => {
     expect(() => readConfig({ NOC_PORT: value })).toThrow(/NOC_PORT/);
+  });
+
+  test.each([["abc"], ["-1"], ["3601"], ["1.5"]])("NOC_LOAD_TIMEOUT=%p", (value) => {
+    expect(() => readConfig({ NOC_LOAD_TIMEOUT: value })).toThrow(
+      `NOC_LOAD_TIMEOUT must be an integer number of seconds between 0 and 3600, received "${value}"`,
+    );
   });
 
   test("an unknown log level", () => {

@@ -1,5 +1,39 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- A slow site no longer dies in its pane. Any site that took more than ten
+  seconds to start answering had its request cut off, so whatever answers a
+  network failure answered instead: the browser's error page, or — as actually
+  seen — the site's own "you are offline" page from its service worker. Either
+  looks exactly like the site being down, although it would have loaded. The cut came from the wall's server, not from
+  the site: it gave up on any connection that had been quiet for ten seconds.
+  It no longer does.
+
+- Live data that goes quiet is no longer cut. The same ten-second rule silently
+  closed event streams and long polls inside a pane whenever they had nothing
+  to say for ten seconds, so a dashboard could stop updating without any error.
+
+### Added
+
+- `NOC_LOAD_TIMEOUT` sets how long a pane waits for a site to start answering:
+  120 seconds by default, `0` to wait as long as it takes, anything up to 3600.
+  Once a site has started answering it may keep streaming for as long as it
+  likes. A value the wall cannot read stops it from starting, with a message
+  saying why.
+
+- When a site does run out of time, the pane says so in plain words — which
+  site, how long it waited, and that `NOC_LOAD_TIMEOUT` raises the limit —
+  instead of a cut connection that reads as "offline".
+
+Not seen on screen yet: no slow site has been watched loading in a pane. The
+fix is proven by an experiment against the server and by unit tests. A site
+whose service worker has its own network timeout will still show its offline
+page however long the wall waits — that is the site's decision; opening the
+same address in a plain browser tab while it is slow tells the two apart.
+
 ## [0.4.0] - 2026-10-21
 
 ### Removed

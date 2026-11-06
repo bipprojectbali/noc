@@ -60,7 +60,10 @@ const wall = createWallRoutes(wallAccess);
 // the reason the bind address is not widened here.
 const dispatch = createHostDispatch({
   registry: proxySiteRegistry,
-  proxy: createProxyHandler({ registry: proxySiteRegistry }),
+  proxy: createProxyHandler({
+    registry: proxySiteRegistry,
+    upstreamTimeoutMs: config.loadTimeoutSeconds * 1000,
+  }),
 });
 const wallOnly = dispatch.wallOnly;
 
@@ -69,6 +72,11 @@ try {
   server = Bun.serve({
     hostname: config.host,
     port: config.port,
+    // Off, not tuned: Bun's 10 s default measures socket silence, so it killed
+    // slow sites before their first byte and cut quiet event streams. The wait
+    // for a site is now the proxy's, from NOC_LOAD_TIMEOUT. Unbounded idle
+    // sockets are no exposure on a loopback-only server.
+    idleTimeout: 0,
     routes: {
       // The manifest and its icons. Real routes, so the landing redirect in the
       // catch-all cannot swallow them, and `wallOnly` so a proxied site keeps
