@@ -32,6 +32,12 @@ export type NocConfig = {
   dataDir: string;
   dbFile: string;
   logLevel: LogLevel;
+  /**
+   * Seconds the proxy waits for a site's first response (its headers); `0`
+   * waits indefinitely. Only the header wait — a body already streaming is
+   * never cut, so event streams and long polls are unaffected.
+   */
+  loadTimeoutSeconds: number;
 };
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -39,6 +45,11 @@ const DEFAULT_PORT = 7788;
 const DEFAULT_DATA_DIR = ".noc-data";
 const DEFAULT_DB_FILE = "noc.sqlite";
 const DEFAULT_LOG_LEVEL: LogLevel = "info";
+/**
+ * Two minutes because a slow dashboard is still a dashboard: the old wait was
+ * Bun's 10 s socket idle rule, which declared sites dead that would have loaded.
+ */
+const DEFAULT_LOAD_TIMEOUT_SECONDS = 120;
 
 /**
  * Directory name under the per-user data root.
@@ -67,6 +78,25 @@ function readPort(raw: string | undefined): number {
     );
   }
   return port;
+}
+
+/** `0` is legal and means "wait indefinitely"; see `NocConfig.loadTimeoutSeconds`. */
+const LOAD_TIMEOUT_MIN = 0;
+const LOAD_TIMEOUT_MAX = 3600;
+
+function readLoadTimeout(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return DEFAULT_LOAD_TIMEOUT_SECONDS;
+  const seconds = Number(raw);
+  if (
+    !Number.isInteger(seconds) ||
+    seconds < LOAD_TIMEOUT_MIN ||
+    seconds > LOAD_TIMEOUT_MAX
+  ) {
+    throw new Error(
+      `NOC_LOAD_TIMEOUT must be an integer number of seconds between ${LOAD_TIMEOUT_MIN} and ${LOAD_TIMEOUT_MAX}, received "${raw}"`,
+    );
+  }
+  return seconds;
 }
 
 function readLogLevel(raw: string | undefined): LogLevel {
@@ -171,6 +201,7 @@ export function readConfig(
     dataDir: env.NOC_DATA_DIR || defaultDataDir(env, runtime),
     dbFile: env.NOC_DB_FILE || DEFAULT_DB_FILE,
     logLevel: readLogLevel(env.NOC_LOG_LEVEL),
+    loadTimeoutSeconds: readLoadTimeout(env.NOC_LOAD_TIMEOUT),
   };
 }
 
